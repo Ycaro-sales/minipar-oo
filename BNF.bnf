@@ -1,0 +1,100 @@
+<program> ::= <declaration>+
+<declaration> ::= <class_decl> | <func_decl> | <var_decl> | <channel_decl>
+
+/* ORIENTAÇÃO À OBJETOS */
+<class_decl> ::= "class" <id> ("extends" <id>)? "{" <class_member>+ "}"
+<class_member> ::= <var_decl> | <method_decl>
+<method_decl> ::= <type> <id> "(" <params> ")" "{" <block> "}"
+<method_call> ::= <id> "." <id> "(" <args>? ")"
+<obj_creation> ::= "new" <id> "(" <args>? ")"
+
+/* FUNÇÕES */
+<func_decl> ::= "func" <id> "(" <params>? ")" <type> "{" <block> "}"
+<params> ::= <param> ("," <param>)*
+<param> ::= <type> <id>
+<func_call> ::= <id> "(" <args>? ")"
+<args> ::= <expr> ("," <expr>)*
+
+/* VARIÁVEIS */
+<var_decl> ::= <type> <id> ("=" <expr>)?
+<assignment> ::= <id> "=" <expr>
+
+/* COMANDOS */
+<block> ::= <stmt>*
+<stmt> ::= <compound_stmt> | <simple_stmt>
+<compound_stmt> ::= <if_stmt>
+				| <while_stmt>
+				| <do_stmt>
+				| <for_stmt>
+				| <seq_stmt>
+				| <par_stmt>
+				| <channel_stmt>
+				| <print_call>
+				| <input_call>
+				| <method_call> ";"
+				| <expr>
+<if_stmt> ::= "if" "(" <expr> ")" "{" <block> "}"
+<while_stmt> ::= "while" "(" <expr> ")" "{" <block> "}"
+<do_stmt> ::= "do" "{" <block> ")" "while" "(" <expr> ")"
+<for_stmt> ::= "for" "(" <type> <id> "in" <expr> ")" "{" <block> "}"
+<seq_stmt> ::= "seq" "{" <block> "}"
+<par_stmt> ::= "par" "{" <block> "}"
+<print_call> ::= "print" "(" <args>? ")" ";"
+<input_call> ::= "input" "(" <string>? ")" ";"
+<simple_stmt> ::= <var_decl>
+				| <assignment>
+				| <expr_stmt> ";"
+				| "return" <expr>? ";"
+				| "break" ";"
+				| "continue" ";"
+				| "pass" ";"
+<expr_stmt> ::= <assignment> | <func_call>
+
+/* CANAIS E MENSAGENS - revisar */
+<channel_stmt> ::= <s_channel_stmt> | <c_channel_stmt>
+<s_channel_stmt> ::= "s_channel" <id> "(" <args>? ")" ";"
+<c_channel_stmt> ::= "c_channel" <id> "(" <args>? ")" ";"
+<send_stmt> ::= <id> "." "send" "(" <args>? ")" ";" 		/* nunca usado */
+<receive_stmt> ::= <id> "." "receive" "(" <args>? ")" ";" 	/* nunca usado */
+
+/* EXPRESSOES */
+<expr> ::= <or_expr>
+<or_expr> ::= <and_expr> ("or" <and_expr>)*
+<and_expr> ::= <comparison_expr> ("and" <comparison_expr>)*
+<comparison_expr> ::= <additive_expr> (("==" | "!=" | "<" | ">" | "<=" | ">=") <additive_expr>)*
+<additive_expr> ::= <multiplicative_expr> (("+" | "-") <multiplicative_expr>)*
+<multiplicative_expr> ::= <unary_expr> (("*" | "/" | "%") <unary_expr>)*
+<unary_expr> ::= ("-" | "!") <unary_expr> | <postfix_expr>
+<postfix_expr> ::= <primary_expr> | <method_call> | <func_call> | <postfix_expr> "[" <expr> "]"
+<primary_expr> ::= <numero>
+				 | <string>
+				 | "true"
+				 | "false"
+				 | <id>
+				 | <obj_creation>
+				 | <list_literal>
+				 | <dict_literal>
+				 | "(" <expr> ")"
+
+/* PRIMARIOS */
+<numero> ::= ("0" | [1-9] [0-9]*) ("." [0-9]+)?
+<string> ::= "\"" <char_chain> "\""
+<char_chain> ::= <char> <char_chain> | E
+<char> ::= [0-9] | [A-Z] | [a-z] | "." | "-" | "_" | "," | "!" | "?" | ":" | " " | "\n"
+<id> ::= [a-z] ([0-9] | [a-z] | [A-Z])*
+<list_literal> ::= "[" (<expr> ("," <expr>)*)? "]"
+<dict_literal> ""= "{" (<key_value_pair> ("," <key_value_pair>)*)? "}"
+<key_value_pair> ::= <string> ":" <expr>
+
+/* TIPOS */
+<type> ::= "number"
+		 | "string"
+		 | "bool"
+		 | "void"
+		 | "list"
+		 | "dict"
+		 | <id>
+
+/* COMENTARIOS */
+<inline_comment> ::= "#" <char_chain>*
+<block_comment> ::= "/*" <char_chain>* "*/"
