@@ -1,7 +1,0 @@
-class MinhaClasse {
-    number x = 10;
-    # Isso é um comentario
-    func fazAlgo() void {
-        print(x);
-    }
-}
