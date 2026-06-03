@@ -3,237 +3,621 @@ package parser
 import (
 	"fmt"
 	"minipar/ast"
-
-	"github.com/antlr4-go/antlr/v4"
+	"minipar/lexer" // Importa o Lexer do seu amigo
 )
 
+// ==========================================
+// 1. A ESTRUTURA DA FACADE (O MOTOR)
+// ==========================================
+
 type MiniparFacade struct {
-	errors []string
+	l            *lexer.Lexer
+	currentToken lexer.Token // O token que estamos lendo agora
+	peekToken    lexer.Token // O próximo token (a "espiadinha")
+	errors       []string    // Lista de erros sintáticos
+}
+
+// nextToken avança os ponteiros do parser, consumindo um token do Lexer.
+func (f *MiniparFacade) nextToken() {
+	f.currentToken = f.peekToken
+	f.peekToken = f.l.NextToken()
+}
+
+// currentTokenIs checa se o token atual é do tipo esperado.
+func (f *MiniparFacade) currentTokenIs(t lexer.TokenType) bool {
+	return f.currentToken.Type == t
+}
+
+// peekTokenIs checa se o PRÓXIMO token é do tipo esperado.
+func (f *MiniparFacade) peekTokenIs(t lexer.TokenType) bool {
+	return f.peekToken.Type == t
+}
+
+// expectPeek é a função mais importante ("consume" do PDF).
+// Ela olha o próximo token. Se for o que a gente quer, ela avança.
+// Se não for, ela gera um erro na tela e não avança.
+func (f *MiniparFacade) expectPeek(t lexer.TokenType) bool {
+	if f.peekTokenIs(t) {
+		f.nextToken()
+		return true
+	}
+	f.peekError(t)
+	return false
+}
+
+// peekError formata a mensagem de erro bonitinha.
+func (f *MiniparFacade) peekError(t lexer.TokenType) {
+	msg := fmt.Sprintf("Erro sintático: esperava o token '%s', mas recebi '%s' (valor: '%s')",
+		t, f.peekToken.Type, f.peekToken.Literal)
+	f.errors = append(f.errors, msg)
 }
 
 // ==========================================
-// PONTO DE ENTRADA DO SEMÂNTICO
+// 2. O PONTO DE ENTRADA (ParseProgram)
 // ==========================================
 
+// ParseProgram é a função que o main.go chama.
 func ParseProgram(code string) (*ast.Program, []string) {
-	facade := &MiniparFacade{}
+	// Inicia o lexer do seu amigo
+	l := lexer.New(code)
 
-	input := antlr.NewInputStream(code)
-	lexer := NewMiniparLexer(input)
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	p := NewMiniparParser(stream)
-
-	p.RemoveErrorListeners()
-	errorListener := &CustomErrorListener{facade: facade}
-	p.AddErrorListener(errorListener)
-
-	tree := p.Program()
-
-	if len(facade.errors) > 0 {
-		return nil, facade.errors
+	// Cria a nossa Facade
+	f := &MiniparFacade{
+		l:      l,
+		errors: []string{},
 	}
 
-	astRoot := facade.buildAST(tree)
-	return astRoot, nil
-}
+	// Chama nextToken duas vezes para preencher o currentToken e o peekToken
+	f.nextToken()
+	f.nextToken()
 
-// ==========================================
-// TRATAMENTO DE ERROS
-// ==========================================
-
-type CustomErrorListener struct {
-	*antlr.DefaultErrorListener
-	facade *MiniparFacade
-}
-
-func (c *CustomErrorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
-	errStr := fmt.Sprintf("Erro Sintático na linha %d, coluna %d: %s", line, column, msg)
-	c.facade.errors = append(c.facade.errors, errStr)
-}
-
-// ==========================================
-// CONVERSOR DA AST (ANTLR -> GO PURO)
-// ==========================================
-
-func (f *MiniparFacade) buildAST(ctx IProgramContext) *ast.Program {
+	// Cria o molde da árvore raiz
 	program := &ast.Program{
 		Declarations: []ast.Node{},
 	}
 
-	for _, declCtx := range ctx.AllDeclaration() {
+	// O Loop Principal (Equivalente à regra: <program> ::= <declaration>+)
+	for !f.currentTokenIs(lexer.EOF) {
+		decl := f.parseDeclaration() // Vai tentar ler uma declaração global
 
-		// 1. Canais
-		if channelStmt := declCtx.Channel_stmt(); channelStmt != nil {
-			if cChan := channelStmt.C_channel_stmt(); cChan != nil {
-				program.Declarations = append(program.Declarations, &ast.ChannelStmt{
-					Line:     cChan.GetStart().GetLine(),
-					ChanType: "c_channel",
-					Name:     cChan.Id(0).GetText(),
-					Comp1:    cChan.Id(1).GetText(),
-					Comp2:    cChan.Id(2).GetText(),
-				})
-			}
+		if decl != nil {
+			program.Declarations = append(program.Declarations, decl)
 		}
 
-		// 2. Classes
-		if classCtx := declCtx.Class_decl(); classCtx != nil {
-			classNode := &ast.ClassDecl{
-				Line:    classCtx.GetStart().GetLine(),
-				Name:    classCtx.Id(0).GetText(),
-				Members: []ast.Node{},
-			}
-			if len(classCtx.AllId()) > 1 {
-				classNode.Extends = classCtx.Id(1).GetText()
-			}
-
-			// Varrendo variáveis dentro da classe
-			for _, memberCtx := range classCtx.AllClass_member() {
-				if varDeclCtx := memberCtx.Var_decl(); varDeclCtx != nil {
-					varNode := &ast.VarDecl{
-						Line: varDeclCtx.GetStart().GetLine(),
-						Type: varDeclCtx.Type_().GetText(),
-						Name: varDeclCtx.Id().GetText(),
-					}
-					if varDeclCtx.Expr() != nil {
-						varNode.Value = f.buildExpression(varDeclCtx.Expr())
-					}
-					classNode.Members = append(classNode.Members, varNode)
-				}
-			}
-			program.Declarations = append(program.Declarations, classNode)
-		}
-
-		// 3. Funções
-		if funcCtx := declCtx.Func_decl(); funcCtx != nil {
-			funcNode := &ast.FuncDecl{
-				Line:       funcCtx.GetStart().GetLine(),
-				Name:       funcCtx.Id().GetText(),
-				ReturnType: funcCtx.Type_().GetText(),
-				Body:       f.buildBlock(funcCtx.Block()),
-			}
-			program.Declarations = append(program.Declarations, funcNode)
-		}
-
-		// 4. Variáveis Globais
-		if varCtx := declCtx.Var_decl(); varCtx != nil {
-			varNode := &ast.VarDecl{
-				Line: varCtx.GetStart().GetLine(),
-				Type: varCtx.Type_().GetText(),
-				Name: varCtx.Id().GetText(),
-			}
-			if varCtx.Expr() != nil {
-				varNode.Value = f.buildExpression(varCtx.Expr())
-			}
-			program.Declarations = append(program.Declarations, varNode)
-		}
+		f.nextToken()
 	}
 
-	return program
+	// Se achou erros, devolve a lista de erros e árvore nula
+	if len(f.errors) > 0 {
+		return nil, f.errors
+	}
+
+	return program, nil
 }
 
-// buildBlock varre as instruções dentro das chaves { ... }
-func (f *MiniparFacade) buildBlock(blockCtx IBlockContext) *ast.BlockStmt {
-	if blockCtx == nil {
+// ==========================================
+// 3. REGRAS GLOBAIS (Declarations)
+// ==========================================
+
+// Regra: <declaration> ::= <class_decl> | <func_decl> | <var_decl> | <channel_decl>
+func (f *MiniparFacade) parseDeclaration() ast.Node {
+	switch f.currentToken.Type {
+	case lexer.CLASS:
+		return f.parseClassDecl()
+	case lexer.FUNC:
+		return f.parseFuncDecl()
+	case lexer.C_CHANNEL, lexer.S_CHANNEL:
+		return f.parseChannelDecl()
+	// Como variáveis globais começam com um tipo (number, string, etc):
+	case lexer.TYPE_NUMBER, lexer.TYPE_STRING, lexer.TYPE_BOOL, lexer.TYPE_VOID, lexer.TYPE_LIST, lexer.TYPE_DICT:
+		return f.parseVarDecl()
+	default:
+		// Se não é nenhuma palavra reservada global, checamos se é uma classe (tipo customizado)
+		if f.currentToken.Type == lexer.IDENT {
+			// Pode ser "Neuronio peso = 0"
+			return f.parseVarDecl()
+		}
+		return nil
+	}
+}
+
+// ==========================================
+// 4. LENDO VARIÁVEIS E CLASSES
+// ==========================================
+
+// Regra: <var_decl> ::= <type> <id> ("=" <expr>)?
+func (f *MiniparFacade) parseVarDecl() *ast.VarDecl {
+	decl := &ast.VarDecl{
+		// O currentToken agora é o TIPO (ex: "number", "string" ou um ID de classe)
+		Type: f.currentToken.Literal,
+	}
+
+	// O próximo token OBRIGATORIAMENTE tem que ser o NOME da variável (<id>)
+	if !f.expectPeek(lexer.IDENT) {
+		return nil
+	}
+	decl.Name = f.currentToken.Literal
+
+	// Verifica se tem a parte opcional da atribuição ("=" <expr>)?
+	if f.peekTokenIs(lexer.ASSIGN) {
+		f.nextToken() // Pula para o "="
+		f.nextToken() // Pula para o início da expressão/valor
+
+		// Chama a função que lê expressões matemáticas ou valores
+		decl.Value = f.parseExpression()
+	}
+
+	// NOTA: Como a sua BNF NÃO tem ";" no final de variáveis,
+	// a função acaba perfeitamente aqui!
+	return decl
+}
+
+// Regra: <class_decl> ::= "class" <id> ("extends" <id>)? "{" <class_member>+ "}"
+func (f *MiniparFacade) parseClassDecl() *ast.ClassDecl {
+	classNode := &ast.ClassDecl{
+		Members: []ast.Node{},
+	}
+
+	// Espera o nome da classe
+	if !f.expectPeek(lexer.IDENT) {
+		return nil
+	}
+	classNode.Name = f.currentToken.Literal
+
+	// Checa a parte opcional: ("extends" <id>)?
+	if f.peekTokenIs(lexer.EXTENDS) {
+		f.nextToken()                   // Pula para o "extends"
+		if !f.expectPeek(lexer.IDENT) { // Espera o nome da superclasse
+			return nil
+		}
+		classNode.Extends = f.currentToken.Literal
+	}
+
+	// Espera abrir as chaves "{"
+	if !f.expectPeek(lexer.LBRACE) {
 		return nil
 	}
 
+	f.nextToken() // Entra no primeiro token do miolo da classe
+
+	// Lê os membros da classe até achar a chave de fechar "}"
+	for !f.currentTokenIs(lexer.RBRACE) && !f.currentTokenIs(lexer.EOF) {
+
+		// <class_member> ::= <var_decl> | <method_decl>
+		// ATENÇÃO: Por enquanto, vamos ler apenas variáveis.
+		// Quando formos fazer a Issue de Funções, adicionamos um 'if' aqui
+		// para checar se o membro tem um "(" (o que indica que é um método).
+		member := f.parseVarDecl()
+
+		if member != nil {
+			classNode.Members = append(classNode.Members, member)
+		}
+
+		f.nextToken() // Avança para a próxima declaração da classe
+	}
+
+	return classNode
+}
+
+// ==========================================
+// 5. PLACEHOLDER DE EXPRESSÕES
+// ==========================================
+
+// parseExpression será o coração da Issue #23.
+// Por enquanto, deixamos esse "boneco" apenas capturando o valor bruto
+// para o código compilar e não travar a árvore.
+// Regra: <stmt> ::= <compound_stmt> | <simple_stmt>
+func (f *MiniparFacade) parseStatement() ast.Statement {
+	switch f.currentToken.Type {
+	case lexer.IF:
+		return f.parseIfStmt()
+	case lexer.WHILE:
+		return f.parseWhileStmt()
+	case lexer.SEQ:
+		return f.parseSeqStmt()
+	case lexer.PAR:
+		return f.parseParStmt()
+
+	// Declarações de variáveis locais
+	case lexer.TYPE_NUMBER, lexer.TYPE_STRING, lexer.TYPE_BOOL, lexer.TYPE_VOID:
+		return f.parseVarDecl()
+
+	// --- NOVOS COMANDOS SIMPLES ---
+	case lexer.PRINT:
+		return f.parsePrintStmt()
+	case lexer.RETURN:
+		return f.parseReturnStmt()
+
+	default:
+		// Se o token for um identificador (ex: "peso", "rede")
+		// Pode ser uma atribuição (peso = 10) ou chamada de método/função
+		if f.currentToken.Type == lexer.IDENT {
+			return f.parseIdentifierStmt()
+		}
+		return nil
+	}
+}
+
+// Regra: <block> ::= <stmt>*
+// Especialista em ler tudo que está entre chaves { ... }
+func (f *MiniparFacade) parseBlock() *ast.BlockStmt {
 	block := &ast.BlockStmt{
-		Line:       blockCtx.GetStart().GetLine(),
 		Statements: []ast.Statement{},
 	}
 
-	for _, stmtCtx := range blockCtx.AllStmt() {
+	f.nextToken() // Avança para o primeiro token dentro das chaves
 
-		// COMANDOS COMPOSTOS (If, While, Seq, Par)
-		if compStmt := stmtCtx.Compound_stmt(); compStmt != nil {
+	// Loop contínuo: lê comandos até achar a chave de fechamento '}'
+	for !f.currentTokenIs(lexer.RBRACE) && !f.currentTokenIs(lexer.EOF) {
+		stmt := f.parseStatement() // Manda pro Roteador
 
-			if seqCtx := compStmt.Seq_stmt(); seqCtx != nil {
-				block.Statements = append(block.Statements, &ast.SeqStmt{
-					Line:  seqCtx.GetStart().GetLine(),
-					Block: f.buildBlock(seqCtx.Block()),
-				})
-			}
-
-			if parCtx := compStmt.Par_stmt(); parCtx != nil {
-				block.Statements = append(block.Statements, &ast.ParStmt{
-					Line:  parCtx.GetStart().GetLine(),
-					Block: f.buildBlock(parCtx.Block()),
-				})
-			}
-
-			if ifCtx := compStmt.If_stmt(); ifCtx != nil {
-				block.Statements = append(block.Statements, &ast.IfStmt{
-					Line:      ifCtx.GetStart().GetLine(),
-					Condition: f.buildExpression(ifCtx.Expr()),
-					Block:     f.buildBlock(ifCtx.Block()),
-				})
-			}
-
-			if whileCtx := compStmt.While_stmt(); whileCtx != nil {
-				block.Statements = append(block.Statements, &ast.WhileStmt{
-					Line:      whileCtx.GetStart().GetLine(),
-					Condition: f.buildExpression(whileCtx.Expr()),
-					Block:     f.buildBlock(whileCtx.Block()),
-				})
-			}
+		if stmt != nil {
+			block.Statements = append(block.Statements, stmt)
 		}
-
-		// COMANDOS SIMPLES (Atribuições, Declarações locais)
-		if simpStmt := stmtCtx.Simple_stmt(); simpStmt != nil {
-
-			if varCtx := simpStmt.Var_decl(); varCtx != nil {
-				varNode := &ast.VarDecl{
-					Line: varCtx.GetStart().GetLine(),
-					Type: varCtx.Type_().GetText(),
-					Name: varCtx.Id().GetText(),
-				}
-				if varCtx.Expr() != nil {
-					varNode.Value = f.buildExpression(varCtx.Expr())
-				}
-				block.Statements = append(block.Statements, varNode)
-			}
-
-			if assignCtx := simpStmt.Assignment(); assignCtx != nil {
-				block.Statements = append(block.Statements, &ast.Assignment{
-					Line:  assignCtx.GetStart().GetLine(),
-					Name:  assignCtx.Id().GetText(),
-					Value: f.buildExpression(assignCtx.Expr()),
-				})
-			}
-		}
+		f.nextToken()
 	}
 
 	return block
 }
 
-// buildExpression resolve os valores e contas matemáticas
-func (f *MiniparFacade) buildExpression(exprCtx IExprContext) ast.Expression {
-	if exprCtx == nil {
+// Regra: <seq_stmt> ::= "seq" "{" <block> "}"
+func (f *MiniparFacade) parseSeqStmt() *ast.SeqStmt {
+	stmt := &ast.SeqStmt{}
+
+	// Espera abrir a chave '{' do bloco sequencial
+	if !f.expectPeek(lexer.LBRACE) {
 		return nil
 	}
-	// O ANTLR gera uma árvore profunda para a precedência.
-	// Para pegar o texto literal e quebrar em algo simples para o Semântico:
 
-	text := exprCtx.GetText()
-	line := exprCtx.GetStart().GetLine()
+	// Terceiriza a leitura do miolo para o parseBlock!
+	stmt.Block = f.parseBlock()
 
-	// Checagens simplificadas de literais puros
-	if text == "true" || text == "false" {
-		return &ast.BooleanLiteral{Line: line, Value: text == "true"}
+	return stmt
+}
+
+// Regra: <par_stmt> ::= "par" "{" <block> "}"
+func (f *MiniparFacade) parseParStmt() *ast.ParStmt {
+	stmt := &ast.ParStmt{}
+
+	// Espera abrir a chave '{' do bloco paralelo
+	if !f.expectPeek(lexer.LBRACE) {
+		return nil
 	}
 
-	// Tenta checar se é um ID puro ou Número (como um fallback seguro)
-	// Num cenário real profundo, você navegaria até exprCtx.Or_expr().And_expr()... etc
-	// Para o escopo deste facade inicial, encapsulamos o literal.
-	if len(text) > 0 && text[0] == '"' {
-		return &ast.StringLiteral{Line: line, Value: text}
+	// Terceiriza a leitura do miolo
+	stmt.Block = f.parseBlock()
+
+	return stmt
+}
+
+// ==========================================
+// 7. CONTROLES DE FLUXO (IF e WHILE)
+// ==========================================
+
+// Regra: <if_stmt> ::= "if" "(" <expr> ")" "{" <block> "}"
+func (f *MiniparFacade) parseIfStmt() *ast.IfStmt {
+	stmt := &ast.IfStmt{}
+
+	// Espera abrir parênteses "("
+	if !f.expectPeek(lexer.LPAREN) {
+		return nil
 	}
 
-	if text[0] >= '0' && text[0] <= '9' {
-		return &ast.IntegerLiteral{Line: line, Value: text}
+	f.nextToken() // Pula para o início da expressão/condição
+
+	// Chama a função matemática para resolver a condição (ex: ativo == true)
+	stmt.Condition = f.parseExpression()
+
+	// Espera fechar parênteses ")"
+	if !f.expectPeek(lexer.RPAREN) {
+		return nil
 	}
 
-	// Se não for literal puro, devolvemos como um Identifier genérico ou
-	// poderíamos implementar a recursão completa de BinaryExpr aqui.
-	return &ast.Identifier{Line: line, Value: text}
+	// Espera abrir as chaves "{" do bloco
+	if !f.expectPeek(lexer.LBRACE) {
+		return nil
+	}
+
+	// Terceiriza a leitura do miolo para o parseBlock
+	stmt.Block = f.parseBlock()
+
+	return stmt
+}
+
+// Regra: <while_stmt> ::= "while" "(" <expr> ")" "{" <block> "}"
+func (f *MiniparFacade) parseWhileStmt() *ast.WhileStmt {
+	stmt := &ast.WhileStmt{}
+
+	// Espera abrir parênteses "("
+	if !f.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+
+	f.nextToken() // Pula para a expressão
+
+	// Resolve a condição de parada do while
+	stmt.Condition = f.parseExpression()
+
+	// Espera fechar parênteses ")"
+	if !f.expectPeek(lexer.RPAREN) {
+		return nil
+	}
+
+	// Espera abrir as chaves "{"
+	if !f.expectPeek(lexer.LBRACE) {
+		return nil
+	}
+
+	// Terceiriza a leitura do miolo
+	stmt.Block = f.parseBlock()
+
+	return stmt
+}
+
+// ==========================================
+// 8. FUNÇÕES E CANAIS (Declarações Globais)
+// ==========================================
+
+// Regra: <func_decl> ::= "func" <id> "(" <params>? ")" <type> "{" <block> "}"
+func (f *MiniparFacade) parseFuncDecl() *ast.FuncDecl {
+	decl := &ast.FuncDecl{}
+
+	// O token atual é o "func". Esperamos que o próximo seja o nome da função (<id>)
+	if !f.expectPeek(lexer.IDENT) {
+		return nil
+	}
+	decl.Name = f.currentToken.Literal
+
+	// Espera abrir parênteses "("
+	if !f.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+
+	// Loop para ler os parâmetros: <params> ::= <param> ("," <param>)*
+	// Como a sua struct FuncDecl original não tinha um campo 'Params',
+	// nós vamos apenas varrer e consumir esses tokens por enquanto para a sintaxe não quebrar.
+	for !f.peekTokenIs(lexer.RPAREN) && !f.peekTokenIs(lexer.EOF) {
+		f.nextToken()
+	}
+
+	// Espera fechar parênteses ")"
+	if !f.expectPeek(lexer.RPAREN) {
+		return nil
+	}
+
+	// AQUI TEM UM DETALHE INCRÍVEL DA SUA BNF:
+	// O tipo de retorno vem DEPOIS dos parênteses! (ex: func soma(a, b) number { ... })
+	f.nextToken()
+	decl.ReturnType = f.currentToken.Literal
+
+	// Espera abrir as chaves "{" do corpo da função
+	if !f.expectPeek(lexer.LBRACE) {
+		return nil
+	}
+
+	// Terceiriza a leitura de tudo que tem dentro da função para o nosso operário parseBlock!
+	decl.Body = f.parseBlock()
+
+	return decl
+}
+
+// Regra: <channel_stmt> ::= <s_channel_stmt> | <c_channel_stmt>
+//
+//	<c_channel_stmt> ::= "c_channel" <id> "(" <args>? ")" ";"
+func (f *MiniparFacade) parseChannelDecl() *ast.ChannelStmt {
+	decl := &ast.ChannelStmt{
+		// O token atual já é "c_channel" ou "s_channel"
+		ChanType: f.currentToken.Literal,
+	}
+
+	// Espera o nome do canal (<id>)
+	if !f.expectPeek(lexer.IDENT) {
+		return nil
+	}
+	decl.Name = f.currentToken.Literal
+
+	// A nova BNF exige abrir parênteses "("
+	if !f.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+
+	// Loop para ler os argumentos opcionais (ex: os computadores da rede)
+	for !f.peekTokenIs(lexer.RPAREN) && !f.peekTokenIs(lexer.EOF) {
+		f.nextToken()
+	}
+
+	// Espera fechar parênteses ")"
+	if !f.expectPeek(lexer.RPAREN) {
+		return nil
+	}
+
+	// OBRIGATÓRIO NA BNF: Canais precisam terminar com ponto e vírgula ";"
+	if !f.expectPeek(lexer.SEMICOLON) {
+		return nil
+	}
+
+	return decl
+}
+
+// ==========================================
+// 9. COMANDOS SIMPLES (Print, Return, Atribuição)
+// ==========================================
+
+// Regra: <print_call> ::= "print" "(" <args>? ")" ";"
+func (f *MiniparFacade) parsePrintStmt() *ast.PrintStmt {
+	stmt := &ast.PrintStmt{}
+
+	// Espera abrir parênteses "("
+	if !f.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+	f.nextToken() // Entra no miolo dos parênteses
+
+	// Loop para ler os argumentos (ex: print("Olá", 10))
+	for !f.currentTokenIs(lexer.RPAREN) && !f.currentTokenIs(lexer.EOF) {
+		// Por enquanto só consome os tokens para não travar
+		f.nextToken()
+	}
+
+	// O currentToken agora é ")".
+	// A BNF de vocês EXIGE ponto e vírgula no final do print!
+	if !f.expectPeek(lexer.SEMICOLON) {
+		return nil
+	}
+
+	return stmt
+}
+
+// Regra: "return" <expr>? ";"
+func (f *MiniparFacade) parseReturnStmt() *ast.ReturnStmt {
+	stmt := &ast.ReturnStmt{}
+
+	f.nextToken() // Pula a palavra "return"
+
+	// Se o próximo não for ponto e vírgula, significa que tem uma expressão junto!
+	if !f.currentTokenIs(lexer.SEMICOLON) {
+		stmt.Value = f.parseExpression()
+		f.nextToken() // Pula para o ponto e vírgula
+	}
+
+	// BNF EXIGE ponto e vírgula no final do return!
+	if !f.currentTokenIs(lexer.SEMICOLON) {
+		f.peekError(lexer.SEMICOLON)
+		return nil
+	}
+
+	return stmt
+}
+
+// Lida com comandos que começam com um nome (Variáveis ou Chamadas)
+func (f *MiniparFacade) parseIdentifierStmt() ast.Statement {
+	// Espiamos o próximo token para saber qual regra aplicar
+
+	// Regra: <assignment> ::= <id> "=" <expr>
+	if f.peekTokenIs(lexer.ASSIGN) {
+		stmt := &ast.Assignment{
+			Name: f.currentToken.Literal,
+		}
+
+		f.nextToken() // Pula para o "="
+		f.nextToken() // Pula para o valor
+
+		stmt.Value = f.parseExpression()
+		return stmt
+	}
+
+	// Aqui no futuro adicionaremos:
+	// se peekToken == "(" -> parseFuncCall()
+	// se peekToken == "." -> parseMethodCall()
+
+	return nil
+}
+// ==========================================
+// 10. EXPRESSÕES E PRECEDÊNCIA (Chefão Final)
+// ==========================================
+
+// Regra: <expr> ::= <or_expr>
+func (f *MiniparFacade) parseExpression() ast.Expression {
+	return f.parseOrExpr()
+}
+
+// Regra: <or_expr> ::= <and_expr> ("or" <and_expr>)*
+func (f *MiniparFacade) parseOrExpr() ast.Expression {
+	left := f.parseAndExpr()
+
+	for f.currentTokenIs(lexer.OR) {
+		operator := f.currentToken.Literal
+		f.nextToken() // Consome o "or"
+		right := f.parseAndExpr()
+		left = &ast.BinaryExpr{Left: left, Operator: operator, Right: right}
+	}
+	return left
+}
+
+// Regra: <and_expr> ::= <comparison_expr> ("and" <comparison_expr>)*
+func (f *MiniparFacade) parseAndExpr() ast.Expression {
+	left := f.parseComparisonExpr()
+
+	for f.currentTokenIs(lexer.AND) {
+		operator := f.currentToken.Literal
+		f.nextToken() // Consome o "and"
+		right := f.parseComparisonExpr()
+		left = &ast.BinaryExpr{Left: left, Operator: operator, Right: right}
+	}
+	return left
+}
+
+// Regra: <comparison_expr> ::= <additive_expr> (("==" | "!=" | "<" | ">" | "<=" | ">=") <additive_expr>)*
+func (f *MiniparFacade) parseComparisonExpr() ast.Expression {
+	left := f.parseAdditiveExpr()
+
+	for f.currentTokenIs(lexer.EQ) || f.currentTokenIs(lexer.NOT_EQ) ||
+		f.currentTokenIs(lexer.LT) || f.currentTokenIs(lexer.GT) ||
+		f.currentTokenIs(lexer.LTE) || f.currentTokenIs(lexer.GTE) {
+		
+		operator := f.currentToken.Literal
+		f.nextToken() // Consome o operador
+		right := f.parseAdditiveExpr()
+		left = &ast.BinaryExpr{Left: left, Operator: operator, Right: right}
+	}
+	return left
+}
+
+// Regra: <additive_expr> ::= <multiplicative_expr> (("+" | "-") <multiplicative_expr>)*
+func (f *MiniparFacade) parseAdditiveExpr() ast.Expression {
+	left := f.parseMultiplicativeExpr()
+
+	for f.currentTokenIs(lexer.PLUS) || f.currentTokenIs(lexer.MINUS) {
+		operator := f.currentToken.Literal
+		f.nextToken() // Consome o + ou -
+		right := f.parseMultiplicativeExpr()
+		left = &ast.BinaryExpr{Left: left, Operator: operator, Right: right}
+	}
+	return left
+}
+
+// Regra: <multiplicative_expr> ::= <unary_expr> (("*" | "/" | "%") <unary_expr>)*
+func (f *MiniparFacade) parseMultiplicativeExpr() ast.Expression {
+	left := f.parsePrimaryExpr() // Simplificamos pulando o Unary por enquanto para testar
+
+	for f.currentTokenIs(lexer.ASTERISK) || f.currentTokenIs(lexer.SLASH) || f.currentTokenIs(lexer.MOD) {
+		operator := f.currentToken.Literal
+		f.nextToken() // Consome o *, / ou %
+		right := f.parsePrimaryExpr()
+		left = &ast.BinaryExpr{Left: left, Operator: operator, Right: right}
+	}
+	return left
+}
+
+// Regra: <primary_expr> ::= <numero> | <string> | "true" | "false" | <id> | "(" <expr> ")"
+func (f *MiniparFacade) parsePrimaryExpr() ast.Expression {
+	switch f.currentToken.Type {
+	case lexer.NUMBER:
+		return &ast.IntegerLiteral{Line: 1, Value: f.currentToken.Literal}
+	
+	case lexer.STRING:
+		return &ast.StringLiteral{Line: 1, Value: f.currentToken.Literal}
+	
+	case lexer.TRUE:
+		return &ast.BooleanLiteral{Line: 1, Value: true}
+	
+	case lexer.FALSE:
+		return &ast.BooleanLiteral{Line: 1, Value: false}
+	
+	case lexer.IDENT:
+		// Para simplificar agora, tratamos IDs puros. 
+		// (Futuramente aqui entra a checagem se é chamada de método ou função)
+		return &ast.Identifier{Line: 1, Value: f.currentToken.Literal}
+	
+	case lexer.LPAREN:
+		f.nextToken() // Consome o "("
+		expr := f.parseExpression() // Volta pro topo da escada!
+		if !f.expectPeek(lexer.RPAREN) {
+			return nil
+		}
+		return expr
+	}
+
+	f.errors = append(f.errors, fmt.Sprintf("Erro sintático: Expressão primária não reconhecida: '%s'", f.currentToken.Literal))
+	return nil
 }
