@@ -1,5 +1,5 @@
 <program> ::= <declaration>+
-<declaration> ::= <class_decl> | <func_decl> | <var_decl> | <channel_decl>
+<declaration> ::= <class_decl> | <func_decl> | <var_decl>
 
 /* ORIENTAÇÃO À OBJETOS */
 <class_decl> ::= "class" <id> ("extends" <id>)? "{" <class_member>+ "}"
@@ -16,8 +16,8 @@
 <args> ::= <expr> ("," <expr>)*
 
 /* VARIÁVEIS */
-<var_decl> ::= <type> <id> ("=" <expr>)?
-<assignment> ::= <id> "=" <expr>
+<var_decl> ::= <type> <id> ("=" <expr>)? ";"
+<assignment> ::= <id> "=" <expr> ";"
 
 /* COMANDOS */
 <block> ::= <stmt>*
@@ -54,8 +54,12 @@
 <channel_stmt> ::= <s_channel_stmt> | <c_channel_stmt>
 <s_channel_stmt> ::= "s_channel" <id> "(" <args>? ")" ";"
 <c_channel_stmt> ::= "c_channel" <id> "(" <args>? ")" ";"
-<send_stmt> ::= <id> "." "send" "(" <args>? ")" ";" 		/* nunca usado */
-<receive_stmt> ::= <id> "." "receive" "(" <args>? ")" ";" 	/* nunca usado */
+
+/* nunca usada */
+<send_stmt> ::= <id> "." "send" "(" <args>? ")" ";"
+
+/* nunca usada */
+<receive_stmt> ::= <id> "." "receive" "(" <args>? ")" ";"
 
 /* EXPRESSOES */
 <expr> ::= <or_expr>
@@ -83,7 +87,7 @@
 <char> ::= [0-9] | [A-Z] | [a-z] | "." | "-" | "_" | "," | "!" | "?" | ":" | " " | "\n"
 <id> ::= [a-z] ([0-9] | [a-z] | [A-Z])*
 <list_literal> ::= "[" (<expr> ("," <expr>)*)? "]"
-<dict_literal> ""= "{" (<key_value_pair> ("," <key_value_pair>)*)? "}"
+<dict_literal> ::= "{" (<key_value_pair> ("," <key_value_pair>)*)? "}"
 <key_value_pair> ::= <string> ":" <expr>
 
 /* TIPOS */
