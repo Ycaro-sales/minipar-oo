@@ -58,7 +58,7 @@ func main() {
 	}
 
 	fmt.Println(" AST GERADA COM SUCESSO!\n")
-	
+
 	// Para visualizar a árvore complexa no terminal sem ser apenas endereços de memória,
 	// o jeito mais profisional e limpo no Go é converter a struct para JSON formatado.
 	astJSON, err := json.MarshalIndent(astRaiz, "", "  ")
