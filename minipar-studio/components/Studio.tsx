@@ -26,14 +26,17 @@ if (typeof window !== "undefined") {
   Prism.languages.minipar = {
     comment: [/#.*/, /\/\*[\s\S]*?\*\//],
     string: /"(?:\\.|[^"\\])*"/,
-    keyword: /\b(?:var|func|return|if|else|while|for|break|continue|true|false)\b/,
-    builtin: /\b(?:print|input|number|string|bool|void)\b/,
+    char: /'(?:\\.|[^'\\])'/,
+    keyword: /\b(?:class|interface|implements|func|return|if|else|while|do|for|in|switch|case|break|continue|pass|goto|seq|par|s_channel|c_channel|let|enum|chan|Self)\b/,
+    type: /\b(?:i8|i16|i32|i64|u8|u16|u32|u64|f16|f32|f64|char|string|bool|any|void)\b/,
+    builtin: /\b(?:print|input|true|false)\b/,
     function: /\b[a-zA-Z_]\w*(?=\s*\()/,
     number: /\b\d+(?:\.\d+)?\b/,
-    operator: /->|==|!=|<=|>=|&&|\|\||[+\-*/%=<>!]/,
+    operator: /->|==|!=|<=|>=|or|and|[+\-*/%<>!=]/,
     punctuation: /[{}[\];(),.:]/,
   };
 }
+
 
 // aqui ficam os exemplos rapidos de codigos minipar para popular o editor.
 const EXAMPLES: Record<string, string> = {
@@ -340,7 +343,7 @@ export default function Studio() {
                         <Hammer className="h-4 w-4" /> Compilar
                       </button>
                       <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-4 py-2.5 text-sm hover:bg-muted transition">
-                        <Download className="h-4 w-4" /> Baixar .exe
+                        <Download className="h-4 w-4" /> Baixar binário
                       </button>
                     </div>
                   </>
