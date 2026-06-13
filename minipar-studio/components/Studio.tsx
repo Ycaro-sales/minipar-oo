@@ -406,9 +406,14 @@ export default function Studio() {
         </div>
       </main>
 
-      <footer className="border-t border-border py-4 text-center text-xs text-muted-foreground">
-        Minipar Studio · interface moderna, responsiva e acessível
-      </footer>
+      <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">
+  <p className="font-semibold">Minipar Studio</p>
+  <p className="mt-1">IDE e interface de compilação web, para a linguagem de programação Minipar</p>
+  <p className="mt-2 text-xs">
+    Desenvolvido por: <span className="font-medium">Felipe Lira, Gabriel Seixas, Marcos Mendonça, Wyvian Valença e Ycaro Sales</span>
+  </p>
+</footer>
+
     </div>
   );
 }
