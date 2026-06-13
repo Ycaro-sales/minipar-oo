@@ -1,0 +1,46 @@
+/* calcula o fatorial de x a y */
+func fatorial(x: i32, y: i32) -> void
+{
+  let fat = func(n: i32) -> i32 {
+    let prod: i32 = 1
+    let i: i32 = 2
+    while(i <= n){
+      prod = prod * i
+      i = i + 1
+    }
+    return prod
+  }
+
+  let i: i32 = x
+  while(i <= y)
+  {
+    print("Fatorial de:", i, "=", fat(i))
+    i = i + 1
+    /* sleep(0.5) */
+  }
+}
+
+/* calcula os n primeiros termos de fibonacci */
+func fibonacci(n: i32) -> void{
+  let a: i32 = 0
+  let b: i32 = 1
+  let count: i32 = 0
+
+  while (count < n)
+  {
+    print("Fib:", a)
+    let aux: i32 = a + b
+    a = b
+    b = aux
+    count = count + 1
+    /* sleep(0.5) */
+  }
+}
+
+func main()
+{
+  par{
+    fatorial(2, 5)
+    fibonacci(10)
+  }
+}

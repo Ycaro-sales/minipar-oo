@@ -1,0 +1,20 @@
+func soma(num1: i32, num2: i32) -> string
+{
+  return to_string(num1 + num2)
+}
+
+let desc: string = "Digite dois numeros"
+s_channel calculadora_server(soma, desc, "localhost", 1234)
+
+func main()
+{
+  let a: bool = true
+  let b: bool = 1 >= 2
+  let c: i32 = -1
+
+  while(true){
+    break
+  }
+
+  print(soma(1, 2))
+}
