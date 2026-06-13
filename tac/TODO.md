@@ -10,38 +10,40 @@
     - [x] emit
 - [x] PrintTAC for debbuging
 
-## Type Switch
+## ✅ Type Switch
 
-- [ ] Generate function with type switch
+- [x] Generate function with type switch
 
-## Expression Mapping
+## ✅ Expression Mapping
 
-- [ ] Literals (missing Set, Array, Dict and Tuple literals)
+- [ ] Literals (missing Set, Array, Dict, Tuple and Function literals)
 - [x] Variables
 - [x] Unary Operators
 - [x] Binary Operators
 
-## Commands Mapping
+## ✅ Statements Mapping
 
 - [x] Assingments
-- [ ] Declarations
-- [ ] Blocks
-- [ ] If/Else
-- [ ] Loops
-- [ ] Break
-- [ ] Continue
+- [x] Declarations
+    - [x] Variable Declaration
+    - [x] Function Declaration
+- [x] Blocks
+- [x] If/Else
+- [x] Loops
+- [x] Break
+- [x] Continue
 
-## Functions and Scopes
+## ✅ Functions and Scopes
 
-- [ ] Function Definition
-- [ ] Function Call
-- [ ] Return
+- [x] Function Definition
+- [x] Function Call
+- [x] Return
 
-## Data Structures and Objects
+## ✅ Data Structures and Objects
 
 - [ ] Collections
     - [ ] Array
     - [ ] Dict
     - [ ] Set
     - [ ] Tuple
-- [ ] Classes and Attributes
+- [x] Classes and Attributes
