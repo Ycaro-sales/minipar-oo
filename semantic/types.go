@@ -18,15 +18,17 @@ const (
 	KindInterface
 	KindFunc
 	KindArray
+	KindTuple // immutable fixed-size sequence with per-position element types
 	KindChan
 )
 
 // Type is the canonical, resolved type of an expression or symbol.
 // AST nodes carry types as raw strings; the analyzer resolves them to *Type.
 type Type struct {
-	Name   string // canonical name, used in error messages
+	Name   string  // canonical name, used in error messages
 	Kind   Kind
 	Elem   *Type   // element type, for KindArray
+	Elems  []*Type // per-position element types, for KindTuple
 	Params []*Type // parameter types, for KindFunc
 	Return *Type   // return type, for KindFunc
 }
@@ -82,6 +84,16 @@ func assignable(dst, src *Type) bool {
 		return src.isNumeric()
 	case KindArray:
 		return src.Kind == KindArray && assignable(dst.Elem, src.Elem)
+	case KindTuple:
+		if src.Kind != KindTuple || len(dst.Elems) != len(src.Elems) {
+			return false
+		}
+		for i := range dst.Elems {
+			if !assignable(dst.Elems[i], src.Elems[i]) {
+				return false
+			}
+		}
+		return true
 	case KindInterface:
 		// A class assigned to an interface must implement it; that structural
 		// check happens in the analyzer (it owns the class table). Same-named
@@ -100,6 +112,12 @@ func (t *Type) String() string {
 	switch t.Kind {
 	case KindArray:
 		return "[" + t.Elem.String() + "]"
+	case KindTuple:
+		parts := make([]string, len(t.Elems))
+		for i, e := range t.Elems {
+			parts[i] = e.String()
+		}
+		return "(" + strings.Join(parts, ", ") + ")"
 	case KindFunc:
 		ps := make([]string, len(t.Params))
 		for i, p := range t.Params {

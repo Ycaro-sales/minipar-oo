@@ -231,13 +231,15 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	case *ast.BooleanLiteral:
 		return fmt.Sprintf("%t", n.Value)
 
-	// TODO implement list/array literal (waiting on AST node finalisation)
+	case *ast.ListLiteral:
+		return gen.genListLiteral(n)
+
+	case *ast.TupleLiteral:
+		return gen.genTupleLiteral(n)
 
 	// TODO implement dict literal
 
 	// TODO implement set literal
-
-	// TODO implement tuple literal
 
 	// TODO implement function literal
 
@@ -272,6 +274,10 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	/* STATEMENTS */
 	case *ast.Assignment:
 		gen.genAssignment(n)
+		return ""
+
+	case *ast.IndexAssignment:
+		gen.genIndexAssignment(n)
 		return ""
 
 	case *ast.VarDecl:
@@ -389,6 +395,39 @@ func (gen *TACGenerator) genIndexExpr(node *ast.IndexExpr) string {
 	result := gen.newTypedTemp(node.ResolvedType())
 	gen.emit("ARRAY_GET", obj, idx, result)
 	return result
+}
+
+func (gen *TACGenerator) genListLiteral(node *ast.ListLiteral) string {
+	count := fmt.Sprintf("%d", len(node.Elements))
+	elemType := ""
+	if rt := node.ResolvedType(); len(rt) > 2 {
+		elemType = rt[1 : len(rt)-1] // strip "[" and "]"
+	}
+	result := gen.newTypedTemp(node.ResolvedType())
+	gen.emit("ARRAY_NEW", count, elemType, result)
+	for i, elem := range node.Elements {
+		val := gen.Generate(elem)
+		gen.emit("ARRAY_SET", result, fmt.Sprintf("%d", i), val)
+	}
+	return result
+}
+
+func (gen *TACGenerator) genTupleLiteral(node *ast.TupleLiteral) string {
+	count := fmt.Sprintf("%d", len(node.Elements))
+	result := gen.newTypedTemp(node.ResolvedType())
+	gen.emit("TUPLE_NEW", count, "", result)
+	for i, elem := range node.Elements {
+		val := gen.Generate(elem)
+		gen.emit("TUPLE_SET", result, fmt.Sprintf("%d", i), val)
+	}
+	return result
+}
+
+func (gen *TACGenerator) genIndexAssignment(node *ast.IndexAssignment) {
+	obj := gen.Generate(node.Object)
+	idx := gen.Generate(node.Index)
+	val := gen.Generate(node.Value)
+	gen.emit("ARRAY_SET", obj, idx, val)
 }
 
 func (gen *TACGenerator) genObjCreation(node *ast.ObjCreation) string {

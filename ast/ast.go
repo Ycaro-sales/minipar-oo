@@ -268,6 +268,18 @@ type Assignment struct {
 func (a *Assignment) GetLine() int { return a.Line }
 func (a *Assignment) stmtNode()    {}
 
+// IndexAssignment represents arr[idx] = value, where the left-hand side is an
+// index expression. Only valid on mutable arrays; tuples are immutable.
+type IndexAssignment struct {
+	Line   int
+	Object Expression
+	Index  Expression
+	Value  Expression
+}
+
+func (ia *IndexAssignment) GetLine() int { return ia.Line }
+func (ia *IndexAssignment) stmtNode()    {}
+
 type PrintStmt struct {
 	Line int
 	Args []Expression
@@ -468,6 +480,17 @@ type ListLiteral struct {
 
 func (l *ListLiteral) GetLine() int { return l.Line }
 func (l *ListLiteral) exprNode()    {}
+
+// TupleLiteral is an immutable fixed-size collection with heterogeneous element
+// types, written (e1, e2, ...). Access is by constant integer index.
+type TupleLiteral struct {
+	ExprMeta
+	Line     int
+	Elements []Expression
+}
+
+func (t *TupleLiteral) GetLine() int { return t.Line }
+func (t *TupleLiteral) exprNode()    {}
 
 type DictLiteral struct {
 	ExprMeta

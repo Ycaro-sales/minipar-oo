@@ -120,8 +120,8 @@ func (p *miniparParser) parseVarDecl() *ast.VarDecl {
 	var typeName string
 	if p.peekTokenIs(lexer.COLON) {
 		p.nextToken() // ":"
-		p.nextToken() // type token
-		typeName = p.currentToken.Literal
+		p.nextToken() // first token of type
+		typeName = p.parseType()
 	}
 
 	if !p.expectPeek(lexer.ASSIGN) {
@@ -147,7 +147,7 @@ func (p *miniparParser) parseFieldDecl() *ast.FieldDecl {
 		return nil
 	}
 	p.nextToken()
-	typeName := p.currentToken.Literal
+	typeName := p.parseType()
 
 	var value ast.Expression
 	if p.peekTokenIs(lexer.ASSIGN) {
@@ -242,7 +242,7 @@ func (p *miniparParser) parseMethodDecl() *ast.MethodDecl {
 	if p.peekTokenIs(lexer.ARROW) {
 		p.nextToken()
 		p.nextToken()
-		returnType = p.currentToken.Literal
+		returnType = p.parseType()
 	}
 
 	if !p.expectPeek(lexer.LBRACE) {
@@ -297,7 +297,7 @@ func (p *miniparParser) parseInterfaceMethod() *ast.InterfaceMethod {
 	if p.peekTokenIs(lexer.ARROW) {
 		p.nextToken()
 		p.nextToken()
-		returnType = p.currentToken.Literal
+		returnType = p.parseType()
 	}
 
 	return &ast.InterfaceMethod{Line: line, Name: name, Params: params, ReturnType: returnType}
@@ -323,7 +323,7 @@ func (p *miniparParser) parseFuncDecl() *ast.FuncDecl {
 	if p.peekTokenIs(lexer.ARROW) {
 		p.nextToken()
 		p.nextToken()
-		returnType = p.currentToken.Literal
+		returnType = p.parseType()
 	}
 
 	if !p.expectPeek(lexer.LBRACE) {
@@ -342,6 +342,54 @@ func (p *miniparParser) parseChannelAsDecl() *ast.VarDecl {
 }
 
 // ==========================================
+// Type parsing
+// ==========================================
+
+// parseType reads a type annotation from the current token position.
+// The current token must be the first token of the type (already consumed).
+// Returns the canonical type string: primitives as-is, "[T]" for arrays,
+// "(T0, T1, ...)" for tuples.
+func (p *miniparParser) parseType() string {
+	switch p.currentToken.Type {
+	case lexer.LBRACKET:
+		// Array type: "[" <type> "]"
+		p.nextToken()
+		elem := p.parseType()
+		if !p.expectPeek(lexer.RBRACKET) {
+			return elem // best-effort on error
+		}
+		return "[" + elem + "]"
+	case lexer.LPAREN:
+		// Tuple type: "(" <type> ("," <type>)+ ")"
+		p.nextToken()
+		first := p.parseType()
+		parts := []string{first}
+		for p.peekTokenIs(lexer.COMMA) {
+			p.nextToken() // consume ","
+			p.nextToken() // move to next type
+			parts = append(parts, p.parseType())
+		}
+		if !p.expectPeek(lexer.RPAREN) {
+			return "(" + joinStrings(parts, ", ") + ")" // best-effort
+		}
+		return "(" + joinStrings(parts, ", ") + ")"
+	default:
+		return p.currentToken.Literal
+	}
+}
+
+func joinStrings(ss []string, sep string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
+}
+
+// ==========================================
 // Params
 // ==========================================
 
@@ -357,9 +405,9 @@ func (p *miniparParser) parseParams() []ast.Param {
 		}
 		param := ast.Param{Name: p.currentToken.Literal}
 		if p.peekTokenIs(lexer.COLON) {
-			p.nextToken()
-			p.nextToken()
-			param.Type = p.currentToken.Literal
+			p.nextToken() // ":"
+			p.nextToken() // first token of type
+			param.Type = p.parseType()
 		}
 		params = append(params, param)
 		if !p.peekTokenIs(lexer.COMMA) {
@@ -689,6 +737,36 @@ func (p *miniparParser) parseIdentifierStmt() ast.Statement {
 	name := p.currentToken.Literal
 	line := p.currentToken.Line
 
+	// index assignment: id[expr] = expr
+	if p.peekTokenIs(lexer.LBRACKET) {
+		obj := ast.Expression(&ast.Identifier{Line: line, Value: name})
+		for p.peekTokenIs(lexer.LBRACKET) {
+			p.nextToken() // "["
+			p.nextToken()
+			idx := p.parseExpression()
+			if !p.expectPeek(lexer.RBRACKET) {
+				return nil
+			}
+			obj = &ast.IndexExpr{Line: line, Object: obj, Index: idx}
+		}
+		if p.peekTokenIs(lexer.ASSIGN) {
+			p.nextToken() // "="
+			p.nextToken()
+			value := p.parseExpression()
+			if p.peekTokenIs(lexer.SEMICOLON) {
+				p.nextToken()
+			}
+			// Unwrap the outermost IndexExpr into IndexAssignment.
+			ie := obj.(*ast.IndexExpr)
+			return &ast.IndexAssignment{Line: line, Object: ie.Object, Index: ie.Index, Value: value}
+		}
+		// No assignment — treat as expression statement (read-only index).
+		if p.peekTokenIs(lexer.SEMICOLON) {
+			p.nextToken()
+		}
+		return &ast.ExprStmt{Line: line, Expression: obj}
+	}
+
 	// assignment: id = expr
 	if p.peekTokenIs(lexer.ASSIGN) {
 		p.nextToken()
@@ -909,11 +987,24 @@ func (p *miniparParser) parsePrimaryExpr() ast.Expression {
 
 	case lexer.LPAREN:
 		p.nextToken()
-		expr := p.parseExpression()
+		first := p.parseExpression()
+		// If followed by a comma, this is a tuple literal: (e1, e2, ...)
+		if p.peekTokenIs(lexer.COMMA) {
+			elems := []ast.Expression{first}
+			for p.peekTokenIs(lexer.COMMA) {
+				p.nextToken() // ","
+				p.nextToken()
+				elems = append(elems, p.parseExpression())
+			}
+			if !p.expectPeek(lexer.RPAREN) {
+				return nil
+			}
+			return &ast.TupleLiteral{Line: line, Elements: elems}
+		}
 		if !p.expectPeek(lexer.RPAREN) {
 			return nil
 		}
-		return expr
+		return first
 
 	case lexer.LBRACKET:
 		return p.parseListLiteral()
@@ -938,7 +1029,7 @@ func (p *miniparParser) parseFuncLiteral() *ast.FuncLiteral {
 	if p.peekTokenIs(lexer.ARROW) {
 		p.nextToken()
 		p.nextToken()
-		returnType = p.currentToken.Literal
+		returnType = p.parseType()
 	}
 	if !p.expectPeek(lexer.LBRACE) {
 		return nil
