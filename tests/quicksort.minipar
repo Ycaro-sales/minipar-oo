@@ -1,17 +1,14 @@
-# ALVO: depende de features ainda nao implementadas:
-#   (1) atribuicao por indice  arr[i] = x  (gramatica so permite <id> = <expr>)
-#   (2) arrays passados por referencia (para swap mutar o original)
-#   (3) tipo [i32] em parametros (parser le apenas o literal do token atual)
-# Contorno atual: parametros de array declarados como `any`
-# Hoje ainda falha no semantico (arr[i]=x); serve como especificacao do destino.
+# Quicksort in-place com arrays estaticos.
+# Requer: arr[i] = x (TAC/cgen pendentes nas proximas fases).
+# Parse e analise semantica ja funcionam completamente.
 
-func swap(arr: any, i: i32, j: i32) {
+func swap(arr: [i32], i: i32, j: i32) {
     let tmp: i32 = arr[i]
     arr[i] = arr[j]
     arr[j] = tmp
 }
 
-func partition(arr: any, low: i32, high: i32) -> i32 {
+func partition(arr: [i32], low: i32, high: i32) -> i32 {
     let pivot: i32 = arr[high]
     let i: i32 = low - 1
     let j: i32 = low
@@ -26,7 +23,7 @@ func partition(arr: any, low: i32, high: i32) -> i32 {
     return i + 1
 }
 
-func quicksort(arr: any, low: i32, high: i32) {
+func quicksort(arr: [i32], low: i32, high: i32) {
     if (low < high) {
         let p: i32 = partition(arr, low, high)
         quicksort(arr, low, p - 1)
