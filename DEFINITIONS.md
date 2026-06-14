@@ -68,10 +68,10 @@ f64
 char # 'a'
 string # "abc123"
 
-tuple # (tipo, tipo, ...) # literal: (1, "a") imutavel
-array # [tipo] # literal: [1, 2, 3] # todos do mesmo tipo
-dict # <tipo_chave, tipo_valor> # literal: {a: "a"}
-set # {tipo} # literal: {1, 2, 3}
+tuple # (tipo, tipo, ...) # literal: (1, "a") imutavel — NÃO SUPORTADO ainda
+array # [tipo] # literal: [1, 2, 3] # estático: tamanho fixo definido pelo literal
+dict  # NÃO SUPORTADO — exigiria tabela hash com memória dinâmica
+set   # NÃO SUPORTADO — exigiria tabela hash com memória dinâmica
 chan #
 enum # literal: enum.valor
 
