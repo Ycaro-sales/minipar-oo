@@ -25,6 +25,7 @@
 /* VARIÁVEIS */
 <var_decl> ::= "let" <id> (":" <type>)? "=" <expr> ";"
 <assignment> ::= <id> "=" <expr> ";"
+              | <id> ("[" <expr> "]")+ "=" <expr> ";"
 
 /* COMANDOS */
 <block> ::= <stmt>*
