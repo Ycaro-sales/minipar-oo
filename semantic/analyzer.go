@@ -43,12 +43,32 @@ type Analyzer struct {
 // New returns a ready-to-use Analyzer.
 func New() *Analyzer {
 	g := symtab.NewGlobal[*Type]()
-	return &Analyzer{
+	a := &Analyzer{
 		global:     g,
 		scope:      g,
 		classes:    map[string]*classInfo{},
 		interfaces: map[string]*ifaceInfo{},
 	}
+	a.registerBuiltins()
+	return a
+}
+
+// registerBuiltins predeclares the language's native functions in the global
+// scope, before any user declaration, so example programs can call them. They
+// take a single `any` argument; only the return type is pinned, which is enough
+// for the analyzer to type-check their use sites.
+func (a *Analyzer) registerBuiltins() {
+	builtin := func(name string, ret *Type) {
+		a.global.Define(&symbol{
+			Name: name, Kind: symtab.Func,
+			Type: &Type{Name: "func", Kind: KindFunc, Params: []*Type{tAny}, Return: ret},
+		})
+	}
+	builtin("len", primitives["int"])
+	builtin("to_string", tString)
+	builtin("to_number", primitives["int"])
+	builtin("isalpha", tBool)
+	builtin("isnum", tBool)
 }
 
 // GlobalScope returns the root of the retained scope tree built during
@@ -156,6 +176,9 @@ func (a *Analyzer) resolveType(name string, line int) *Type {
 	}
 	if t, ok := primitives[name]; ok {
 		return t
+	}
+	if name == "chan" || name == "s_channel" || name == "c_channel" {
+		return tChan
 	}
 	if _, ok := a.classes[name]; ok {
 		return &Type{Name: name, Kind: KindClass}
@@ -466,8 +489,19 @@ func (a *Analyzer) checkChannel(n *ast.ChannelStmt) {
 // ==========================================
 
 // checkExpr returns the type of an expression, reporting errors as it goes.
-// It never returns nil: on error it yields tInvalid to halt cascading.
+// It never returns nil: on error it yields tInvalid to halt cascading. As a
+// side effect it decorates the node with its resolved type so later passes
+// (code generation) can read it back without re-deriving types.
 func (a *Analyzer) checkExpr(e ast.Expression) *Type {
+	t := a.inferExpr(e)
+	if e != nil {
+		e.SetResolvedType(t.String())
+	}
+	return t
+}
+
+// inferExpr computes the type of an expression without decorating it.
+func (a *Analyzer) inferExpr(e ast.Expression) *Type {
 	switch n := e.(type) {
 	case *ast.IntLiteral:
 		return primitives["int"]
@@ -542,6 +576,9 @@ func (a *Analyzer) checkBinary(n *ast.BinaryExpr) *Type {
 		}
 		return tBool
 	default: // arithmetic
+		if lt.Kind == KindAny || rt.Kind == KindAny {
+			return tAny // an `any` operand makes the result dynamic
+		}
 		if lt.Kind == KindString && rt.Kind == KindString && n.Operator == ast.OpAdd {
 			return tString // string concatenation
 		}
@@ -601,6 +638,24 @@ func (a *Analyzer) checkMethodCall(n *ast.MethodCall) *Type {
 		return tAny
 	}
 
+	// Channels expose communication methods (send/close) whose signatures are
+	// not yet modeled; accept any call on them.
+	if obj.Kind == KindChan {
+		a.checkArgs(n.Args)
+		return tAny
+	}
+
+	// Arrays support the builtin `append(elem)` method.
+	if obj.Kind == KindArray {
+		if n.Method == "append" {
+			a.checkArgs(n.Args)
+			return tVoid
+		}
+		a.errorf(n.Line, "tipo '%s' não possui método '%s'", obj, n.Method)
+		a.checkArgs(n.Args)
+		return tInvalid
+	}
+
 	var sig *Type
 	switch obj.Kind {
 	case KindClass:
@@ -646,7 +701,7 @@ func (a *Analyzer) checkIndex(n *ast.IndexExpr) *Type {
 	case KindArray:
 		return obj.Elem
 	case KindString:
-		return tChar
+		return tString // indexing a string yields a length-1 string
 	case KindAny, KindInvalid:
 		return tAny
 	}

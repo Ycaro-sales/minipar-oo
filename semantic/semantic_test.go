@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"minipar/ast"
 	"minipar/lexer"
 	"minipar/parser"
 )
@@ -17,6 +18,27 @@ func analyze(t *testing.T, src string) []string {
 		t.Fatalf("erros de parsing inesperados: %v", perrs)
 	}
 	return New().Analyze(prog)
+}
+
+// TestAnalyzerDecoratesTypes verifies the analyzer records each expression's
+// resolved type on the AST node (consumed later by code generation).
+func TestAnalyzerDecoratesTypes(t *testing.T) {
+	prog, perrs := parser.ParseProgram(`let x = 1 + 2; let b = 1 < 2;`)
+	if len(perrs) > 0 {
+		t.Fatalf("erros de parsing inesperados: %v", perrs)
+	}
+	if errs := New().Analyze(prog); len(errs) > 0 {
+		t.Fatalf("erros semânticos inesperados: %v", errs)
+	}
+
+	sum := prog.Declarations[0].(*ast.VarDecl).Value.(*ast.BinaryExpr)
+	if got := sum.ResolvedType(); got != "int" {
+		t.Errorf("tipo de '1 + 2': esperava \"int\", recebeu %q", got)
+	}
+	cmp := prog.Declarations[1].(*ast.VarDecl).Value.(*ast.BinaryExpr)
+	if got := cmp.ResolvedType(); got != "bool" {
+		t.Errorf("tipo de '1 < 2': esperava \"bool\", recebeu %q", got)
+	}
 }
 
 func TestValidPrograms(t *testing.T) {

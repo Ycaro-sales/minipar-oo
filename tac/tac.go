@@ -2,8 +2,9 @@ package tac
 
 import (
 	"fmt"
-	"minipar/ast"
 	"strings"
+
+	"minipar/ast"
 )
 
 // ==========================================
@@ -19,8 +20,8 @@ type TAC struct {
 	result string
 }
 
-// toString formats TAC's elements in string for easier debbuging
-func (t TAC) toString() string {
+// String formats TAC's elements in string for easier debugging.
+func (t TAC) String() string {
 	// if there is no 2nd argument, the operation is either a...
 	if t.arg2 == "" {
 		// ...label or goto...
@@ -39,10 +40,6 @@ func (t TAC) toString() string {
 //  CODE GENERATOR DEFINITION
 // ==========================================
 
-type Symbol struct {
-	symbolType string
-}
-
 type LoopLabels struct {
 	startLabel string
 	endLabel   string
@@ -52,14 +49,42 @@ type TACGenerator struct {
 	instructions []TAC
 	tempCount    int
 	labelCount   int
-	SymbolTable  map[string]Symbol
+	tempTypes    map[string]string // temp name -> resolved type, from the decorated AST
 	loopStack    []LoopLabels
+}
+
+// New returns a ready-to-use TACGenerator.
+func New() *TACGenerator {
+	return &TACGenerator{tempTypes: map[string]string{}}
+}
+
+// TempType returns the resolved type recorded for a temporary, or "" if unknown.
+func (gen *TACGenerator) TempType(name string) string { return gen.tempTypes[name] }
+
+// Instructions returns the generated TAC as one instruction per line.
+func (gen *TACGenerator) Instructions() string {
+	var b strings.Builder
+	for _, ins := range gen.instructions {
+		b.WriteString(ins.String())
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // newTemp creates a new temporary variable and returns it
 func (gen *TACGenerator) newTemp() string {
 	temp := fmt.Sprintf("t%d", gen.tempCount)
 	gen.tempCount++
+	return temp
+}
+
+// newTypedTemp creates a temporary and records its resolved type (when known),
+// so later passes can do type-aware work without re-deriving types.
+func (gen *TACGenerator) newTypedTemp(typ string) string {
+	temp := gen.newTemp()
+	if typ != "" {
+		gen.tempTypes[temp] = typ
+	}
 	return temp
 }
 
@@ -117,7 +142,7 @@ func (gen *TACGenerator) opToString(op ast.Op) string {
 
 func (gen *TACGenerator) getZeroForType(nodeType string) string {
 	switch nodeType {
-	case "i8", "i16", "i32", "i65", "u8", "u16", "u32", "u64":
+	case "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64":
 		return "0"
 	case "f16", "f32", "f64":
 		return "0.0"
@@ -293,7 +318,7 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 func (gen *TACGenerator) genUnaryExpr(node *ast.UnaryExpr) string {
 	arg1 := gen.Generate(node.Right)
 	op := gen.opToString(node.Operator)
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 
 	gen.emit(op, arg1, "", result)
 	return result
@@ -303,7 +328,7 @@ func (gen *TACGenerator) genBinaryExpr(node *ast.BinaryExpr) string {
 	arg1 := gen.Generate(node.Left)
 	arg2 := gen.Generate(node.Right)
 	op := gen.opToString(node.Operator)
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 
 	gen.emit(op, arg1, arg2, result)
 	return result
@@ -313,7 +338,7 @@ func (gen *TACGenerator) genFuncCall(node *ast.FuncCall) string {
 	for _, arg := range node.Args {
 		gen.emit("PARAM", gen.Generate(arg), "", "")
 	}
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 	gen.emit("CALL", node.Name, fmt.Sprint(len(node.Args)), result)
 	return result
 }
@@ -323,7 +348,7 @@ func (gen *TACGenerator) genMethodCall(node *ast.MethodCall) string {
 	for _, arg := range node.Args {
 		gen.emit("PARAM", gen.Generate(arg), "", "")
 	}
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 	gen.emit("METHOD_CALL", obj+"."+node.Method, fmt.Sprint(len(node.Args)), result)
 	return result
 }
@@ -331,7 +356,7 @@ func (gen *TACGenerator) genMethodCall(node *ast.MethodCall) string {
 func (gen *TACGenerator) genIndexExpr(node *ast.IndexExpr) string {
 	obj := gen.Generate(node.Object)
 	idx := gen.Generate(node.Index)
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 	gen.emit("ARRAY_GET", obj, idx, result)
 	return result
 }
@@ -340,7 +365,7 @@ func (gen *TACGenerator) genObjCreation(node *ast.ObjCreation) string {
 	for _, arg := range node.Args {
 		gen.emit("PARAM", gen.Generate(arg), "", "")
 	}
-	result := gen.newTemp()
+	result := gen.newTypedTemp(node.ResolvedType())
 	gen.emit("NEW_OBJ", node.Class, fmt.Sprint(len(node.Args)), result)
 	return result
 }
@@ -360,9 +385,6 @@ func (gen *TACGenerator) genAssignment(node *ast.Assignment) {
 }
 
 func (gen *TACGenerator) genVarDecl(node *ast.VarDecl) {
-	// TODO review symbols table usage after semantic analyses implementation
-	gen.SymbolTable[node.Name] = Symbol{symbolType: node.Type}
-
 	if node.Value != nil {
 		initializer := gen.Generate(node.Value)
 		gen.emit("ASSIGN", initializer, "", node.Name)
@@ -441,13 +463,13 @@ func (gen *TACGenerator) genForStmt(node *ast.ForStmt) string {
 	endLabel := gen.newLabel()
 
 	iter := gen.Generate(node.Iter)
-	idx := gen.newTemp()
+	idx := gen.newTypedTemp("int")
 	gen.emit("ASSIGN", "0", "", idx)
-	length := gen.newTemp()
+	length := gen.newTypedTemp("int")
 	gen.emit("ARRAY_LEN", iter, "", length)
 
 	gen.emit("LABEL", startLabel, "", "")
-	cond := gen.newTemp()
+	cond := gen.newTypedTemp("bool")
 	gen.emit("LT", idx, length, cond)
 	gen.emit("IF_FALSE", cond, "", endLabel)
 
@@ -471,7 +493,7 @@ func (gen *TACGenerator) genSwitchStmt(node *ast.SwitchStmt) string {
 
 	for _, c := range node.Cases {
 		caseVal := gen.Generate(c.Value)
-		cond := gen.newTemp()
+		cond := gen.newTypedTemp("bool")
 		gen.emit("EQ", switchVal, caseVal, cond)
 		nextLabel := gen.newLabel()
 		gen.emit("IF_FALSE", cond, "", nextLabel)
@@ -485,12 +507,18 @@ func (gen *TACGenerator) genSwitchStmt(node *ast.SwitchStmt) string {
 }
 
 func (gen *TACGenerator) genBreakStmt(node *ast.BreakStmt) string {
+	if len(gen.loopStack) == 0 {
+		return ""
+	}
 	top := gen.loopStack[len(gen.loopStack)-1]
 	gen.emit("GOTO", top.endLabel, "", "")
 	return ""
 }
 
 func (gen *TACGenerator) genContinueStmt(node *ast.ContinueStmt) string {
+	if len(gen.loopStack) == 0 {
+		return ""
+	}
 	top := gen.loopStack[len(gen.loopStack)-1]
 	gen.emit("GOTO", top.startLabel, "", "")
 	return ""

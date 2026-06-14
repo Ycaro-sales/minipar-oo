@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"strings"
 	"testing"
 
 	"minipar/ast"
@@ -28,7 +29,7 @@ func (m *mockParser) ParseProgram(_ string) (*ast.Program, []string) {
 func TestCompilerSuccess(t *testing.T) {
 	expected := &ast.Program{Declarations: []ast.Declaration{}}
 	c := New(&mockParser{program: expected})
-	prog, errs := c.Compile("anything")
+	prog, _, errs := c.Compile("anything")
 	if len(errs) != 0 {
 		t.Errorf("want no errors, got %v", errs)
 	}
@@ -43,9 +44,12 @@ func TestCompilerPassesErrors(t *testing.T) {
 		errs:    []string{"linha 1: erro sintático"},
 	}
 	c := New(mock)
-	_, errs := c.Compile("bad code")
+	_, code, errs := c.Compile("bad code")
 	if len(errs) != 1 {
 		t.Errorf("want 1 error, got %d", len(errs))
+	}
+	if code != "" {
+		t.Errorf("want no TAC when parsing fails, got %q", code)
 	}
 }
 
@@ -67,7 +71,7 @@ func TestCompilerWithMockLexer(t *testing.T) {
 func TestCompilerRealParser(t *testing.T) {
 	p := parser.NewParser(func(s string) lexer.Tokenizer { return lexer.New(s) })
 	c := New(p)
-	prog, errs := c.Compile("let answer: i32 = 42;")
+	prog, _, errs := c.Compile("let answer: i32 = 42;")
 	if len(errs) != 0 {
 		t.Fatalf("errors: %v", errs)
 	}
@@ -80,5 +84,28 @@ func TestCompilerRealParser(t *testing.T) {
 	}
 	if v.Name != "answer" {
 		t.Errorf("name: want answer, got %s", v.Name)
+	}
+}
+
+// TestCompilerGeneratesTAC verifies the pipeline runs through to code
+// generation and emits TAC for a valid program.
+func TestCompilerGeneratesTAC(t *testing.T) {
+	src := `
+func main()
+{
+  let x: i32 = 1 + 2
+  print(x)
+}
+`
+	p := parser.NewParser(func(s string) lexer.Tokenizer { return lexer.New(s) })
+	c := New(p)
+	_, code, errs := c.Compile(src)
+	if len(errs) != 0 {
+		t.Fatalf("errors: %v", errs)
+	}
+	for _, want := range []string{"BEGIN_FUNC", "ADD", "PRINT"} {
+		if !strings.Contains(code, want) {
+			t.Errorf("TAC missing %q\n--- code ---\n%s", want, code)
+		}
 	}
 }

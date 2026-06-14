@@ -18,6 +18,7 @@ const (
 	KindInterface
 	KindFunc
 	KindArray
+	KindChan
 )
 
 // Type is the canonical, resolved type of an expression or symbol.
@@ -38,6 +39,7 @@ var (
 	tBool    = &Type{Name: "bool", Kind: KindBool}
 	tChar    = &Type{Name: "char", Kind: KindChar}
 	tString  = &Type{Name: "string", Kind: KindString}
+	tChan    = &Type{Name: "chan", Kind: KindChan}
 )
 
 // primitives maps every spellable primitive (including aliases) to its Type.
