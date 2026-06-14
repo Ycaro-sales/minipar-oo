@@ -13,8 +13,9 @@ import (
 
 func main() {
 	printAST := flag.Bool("ast", false, "print the AST as JSON instead of the generated TAC")
+	printC := flag.Bool("c", false, "generate C code instead of TAC")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "uso: minipar [-ast] <arquivo.minipar>")
+		fmt.Fprintln(os.Stderr, "uso: minipar [-ast] [-c] <arquivo.minipar>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -35,7 +36,15 @@ func main() {
 	})
 	c := compiler.New(p)
 
-	program, code, erros := c.Compile(string(src))
+	var program interface{ /* ast.Program */ }
+	var code string
+	var erros []string
+
+	if *printC {
+		program, code, erros = c.CompileToC(string(src))
+	} else {
+		program, code, erros = c.Compile(string(src))
+	}
 
 	if len(erros) > 0 {
 		fmt.Fprintln(os.Stderr, "erros de compilação:")
