@@ -6,6 +6,7 @@ package semantic
 
 import (
 	"fmt"
+	"strings"
 
 	"minipar/ast"
 	"minipar/internal/symtab"
@@ -170,9 +171,25 @@ func (a *Analyzer) funcType(params []ast.Param, ret string) *Type {
 
 // resolveType maps a raw AST type string to a resolved *Type, reporting unknown
 // names. An empty string means "infer later" and yields any.
+// Supports composite types: "[T]" (array) and "(T0, T1, ...)" (tuple).
 func (a *Analyzer) resolveType(name string, line int) *Type {
 	if name == "" {
 		return tAny
+	}
+	// Array type: "[T]"
+	if len(name) >= 2 && name[0] == '[' && name[len(name)-1] == ']' {
+		elem := a.resolveType(name[1:len(name)-1], line)
+		return &Type{Name: name, Kind: KindArray, Elem: elem}
+	}
+	// Tuple type: "(T0, T1, ...)"
+	if len(name) >= 2 && name[0] == '(' && name[len(name)-1] == ')' {
+		inner := name[1 : len(name)-1]
+		parts := splitTypeList(inner)
+		elems := make([]*Type, len(parts))
+		for i, p := range parts {
+			elems[i] = a.resolveType(strings.TrimSpace(p), line)
+		}
+		return &Type{Name: name, Kind: KindTuple, Elems: elems}
 	}
 	if t, ok := primitives[name]; ok {
 		return t
@@ -188,6 +205,30 @@ func (a *Analyzer) resolveType(name string, line int) *Type {
 	}
 	a.errorf(line, "tipo desconhecido: '%s'", name)
 	return tInvalid
+}
+
+// splitTypeList splits a comma-separated type list, respecting nested brackets/parens.
+func splitTypeList(s string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, c := range s {
+		switch c {
+		case '[', '(':
+			depth++
+		case ']', ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(s[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	if t := strings.TrimSpace(s[start:]); t != "" {
+		parts = append(parts, t)
+	}
+	return parts
 }
 
 // ==========================================
@@ -319,6 +360,8 @@ func (a *Analyzer) checkStmt(s ast.Statement) {
 		a.checkVarDecl(n)
 	case *ast.Assignment:
 		a.checkAssignment(n)
+	case *ast.IndexAssignment:
+		a.checkIndexAssignment(n)
 	case *ast.IfStmt:
 		a.expectBool(n.Condition, "condição do if")
 		a.checkBlock(n.Then, true)
@@ -535,6 +578,8 @@ func (a *Analyzer) inferExpr(e ast.Expression) *Type {
 		return a.checkObjCreation(n)
 	case *ast.ListLiteral:
 		return a.checkList(n)
+	case *ast.TupleLiteral:
+		return a.checkTuple(n)
 	case *ast.FuncLiteral:
 		return a.funcType(n.Params, n.ReturnType)
 	case *ast.DictLiteral:
@@ -693,6 +738,22 @@ func (a *Analyzer) callClass(name string, args []ast.Expression, line int) *Type
 
 func (a *Analyzer) checkIndex(n *ast.IndexExpr) *Type {
 	obj := a.checkExpr(n.Object)
+	switch obj.Kind {
+	case KindTuple:
+		// Tuple index must be a compile-time integer literal.
+		lit, ok := n.Index.(*ast.IntLiteral)
+		if !ok {
+			a.errorf(n.Line, "índice de tupla deve ser literal inteiro constante")
+			a.checkExpr(n.Index) // still decorate
+			return tAny
+		}
+		if int(lit.Value) < 0 || int(lit.Value) >= len(obj.Elems) {
+			a.errorf(n.Line, "índice %d fora dos limites da tupla (tamanho %d)", lit.Value, len(obj.Elems))
+			return tAny
+		}
+		return obj.Elems[lit.Value]
+	}
+	// Non-tuple path: validate index type.
 	idx := a.checkExpr(n.Index)
 	if idx.Kind != KindInt && idx.Kind != KindInvalid && idx.Kind != KindAny {
 		a.errorf(n.Line, "índice deve ser inteiro, recebeu '%s'", idx)
@@ -721,6 +782,40 @@ func (a *Analyzer) checkList(n *ast.ListLiteral) *Type {
 		}
 	}
 	return &Type{Name: "[" + elem.String() + "]", Kind: KindArray, Elem: elem}
+}
+
+func (a *Analyzer) checkTuple(n *ast.TupleLiteral) *Type {
+	elems := make([]*Type, len(n.Elements))
+	for i, e := range n.Elements {
+		elems[i] = a.checkExpr(e)
+	}
+	parts := make([]string, len(elems))
+	for i, e := range elems {
+		parts[i] = e.String()
+	}
+	name := "(" + strings.Join(parts, ", ") + ")"
+	return &Type{Name: name, Kind: KindTuple, Elems: elems}
+}
+
+func (a *Analyzer) checkIndexAssignment(n *ast.IndexAssignment) {
+	obj := a.checkExpr(n.Object)
+	val := a.checkExpr(n.Value)
+
+	switch obj.Kind {
+	case KindTuple:
+		a.errorf(n.Line, "tupla é imutável: não é possível atribuir a índice")
+		return
+	case KindArray:
+		a.checkExpr(n.Index) // validate index type via checkIndex path implicitly
+		if !assignable(obj.Elem, val) {
+			a.errorf(n.Line, "não é possível atribuir '%s' ao elemento do array do tipo '%s'",
+				val, obj.Elem)
+		}
+	case KindAny, KindInvalid:
+		// silently allow
+	default:
+		a.errorf(n.Line, "tipo '%s' não suporta atribuição por índice", obj)
+	}
 }
 
 // ==========================================
