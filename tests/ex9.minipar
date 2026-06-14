@@ -1,0 +1,17 @@
+func fibonacci(n: i32) -> i32
+{
+    if(n == 0){  # Caso base 1
+        return 0
+    }
+    if (n == 1){  # Caso base 2
+        return 1
+    }
+    # Chamada recursiva
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+func main()
+{
+    let valor: i32 = 10
+    print("Fibonacci de ", valor, " é: ", fibonacci(10))
+}

@@ -1,0 +1,39 @@
+func calc(message: string) -> string{
+  let index: i32 = 0
+  let size: i32 = len(message)
+  let result: i32 = 0
+  let operator: string = "+"
+  print(message)
+  while(index < size)
+  {
+    if(isalpha(message[index])){return "INVALIDO"}
+    if(message[index] == " "){
+      index = index + 1
+      continue
+    }
+    if(isnum(message[index])){
+      let valor: string = message[index]
+      index = index + 1
+      while(index < size and isnum(message[index])){
+        valor = valor + message[index]
+        index = index + 1
+      }
+      let valor_num: i32 = to_number(valor)
+      switch(operator){
+        "+" => { result = result + valor_num }
+        "-" => { result = result - valor_num }
+        "*" => { result = result * valor_num }
+        "/" => { result = result / valor_num }
+      }
+    }else{
+      operator = message[index]
+      index = index + 1
+    }
+  }
+  return to_string(result)
+}
+
+func main()
+{
+  print(calc("12 * 12"))
+}

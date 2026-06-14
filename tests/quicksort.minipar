@@ -1,0 +1,42 @@
+# Função para implementar o Quicksort
+func quicksort(arr: any) -> any {
+    if (len(arr) <= 1) { # Caso base: vetor com 0 ou 1 elementos já está ordenado
+        return arr
+    }
+    else {
+        let pivot = arr[0] # Escolhe o primeiro elemento como pivô
+
+        # Particiona em menores/maiores percorrendo a partir do índice 1
+        # (a linguagem atual não tem slicing nem list comprehension)
+        let menores = []
+        let maiores = []
+        let i: i32 = 1
+        while (i < len(arr)) {
+            if (arr[i] <= pivot) {
+                menores.append(arr[i])
+            } else {
+                maiores.append(arr[i])
+            }
+            i = i + 1
+        }
+
+        return quicksort(menores) + [pivot] + quicksort(maiores)
+    }
+}
+
+# Função para exibir interface simples de texto
+func exibir_interface() -> void {
+    print("==== Ordenacao com Quicksort ====")
+
+    # Vetor de exemplo (entrada via input() ainda não é expressão na linguagem)
+    let arr = [5, 2, 9, 1, 7, 3]
+    print("Vetor original: ", arr)
+
+    # Aplicar o Quicksort
+    let vetor_ordenado = quicksort(arr)
+    print("Vetor ordenado: ", vetor_ordenado)
+}
+
+func main() {
+    exibir_interface()
+}

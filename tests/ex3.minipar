@@ -1,0 +1,32 @@
+func soma(num1: i32, num2: i32) -> i32
+{
+  return num1 + num2
+}
+
+func main()
+{
+  let a: i32 = 10
+  print(a)
+  while(a <= 15)
+  {
+    print("oi")
+    a = a + 1
+    if(a == 12){break}
+    print(a)
+  }
+
+  print(a)
+
+  if (a < 13)
+  {
+    print("a é maior ou igual que 13")
+  }
+
+  let res: i32 = soma(2, (3 + 4)*6)
+  print("res =", res)
+
+  /* PARTE 2 */
+  # input(...) ainda não é uma expressão na linguagem; usando um literal
+  let entrada: string = "exemplo"
+  print(entrada)
+}

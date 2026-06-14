@@ -36,7 +36,20 @@ type Statement interface {
 type Expression interface {
 	Node
 	exprNode()
+	// ResolvedType reports the type the semantic analyzer inferred for this
+	// expression, as a canonical type-name string (empty until analysis runs).
+	ResolvedType() string
+	SetResolvedType(string)
 }
+
+// ExprMeta carries analysis results attached to an expression by later passes.
+// Expression nodes embed it so the semantic analyzer can annotate them with a
+// resolved type that code generation reads back. The type is stored as a string
+// (the analyzer's Type.String()) to keep ast free of a semantic import.
+type ExprMeta struct{ resolvedType string }
+
+func (m *ExprMeta) ResolvedType() string     { return m.resolvedType }
+func (m *ExprMeta) SetResolvedType(t string) { m.resolvedType = t }
 
 // Declaration is a top-level declaration (class, interface, func, var).
 type Declaration interface {
@@ -315,6 +328,7 @@ func (e *ExprStmt) stmtNode()    {}
 // ==========================================
 
 type BinaryExpr struct {
+	ExprMeta
 	Line     int
 	Left     Expression
 	Operator Op
@@ -325,6 +339,7 @@ func (b *BinaryExpr) GetLine() int { return b.Line }
 func (b *BinaryExpr) exprNode()    {}
 
 type UnaryExpr struct {
+	ExprMeta
 	Line     int
 	Operator Op
 	Right    Expression
@@ -334,6 +349,7 @@ func (u *UnaryExpr) GetLine() int { return u.Line }
 func (u *UnaryExpr) exprNode()    {}
 
 type Identifier struct {
+	ExprMeta
 	Line  int
 	Value string
 }
@@ -342,6 +358,7 @@ func (i *Identifier) GetLine() int { return i.Line }
 func (i *Identifier) exprNode()    {}
 
 type FuncCall struct {
+	ExprMeta
 	Line int
 	Name string
 	Args []Expression
@@ -352,6 +369,7 @@ func (f *FuncCall) exprNode()    {}
 func (f *FuncCall) stmtNode()    {}
 
 type MethodCall struct {
+	ExprMeta
 	Line   int
 	Object Expression
 	Method string
@@ -363,6 +381,7 @@ func (m *MethodCall) exprNode()    {}
 func (m *MethodCall) stmtNode()    {}
 
 type IndexExpr struct {
+	ExprMeta
 	Line   int
 	Object Expression
 	Index  Expression
@@ -372,6 +391,7 @@ func (i *IndexExpr) GetLine() int { return i.Line }
 func (i *IndexExpr) exprNode()    {}
 
 type ObjCreation struct {
+	ExprMeta
 	Line  int
 	Class string
 	Args  []Expression
@@ -381,6 +401,7 @@ func (o *ObjCreation) GetLine() int { return o.Line }
 func (o *ObjCreation) exprNode()    {}
 
 type FuncLiteral struct {
+	ExprMeta
 	Line       int
 	Params     []Param
 	ReturnType string
@@ -395,6 +416,7 @@ func (f *FuncLiteral) exprNode()    {}
 // ==========================================
 
 type IntLiteral struct {
+	ExprMeta
 	Line  int
 	Value int64
 }
@@ -403,6 +425,7 @@ func (i *IntLiteral) GetLine() int { return i.Line }
 func (i *IntLiteral) exprNode()    {}
 
 type FloatLiteral struct {
+	ExprMeta
 	Line  int
 	Value float64
 }
@@ -411,6 +434,7 @@ func (f *FloatLiteral) GetLine() int { return f.Line }
 func (f *FloatLiteral) exprNode()    {}
 
 type StringLiteral struct {
+	ExprMeta
 	Line  int
 	Value string
 }
@@ -419,6 +443,7 @@ func (s *StringLiteral) GetLine() int { return s.Line }
 func (s *StringLiteral) exprNode()    {}
 
 type CharLiteral struct {
+	ExprMeta
 	Line  int
 	Value rune
 }
@@ -427,6 +452,7 @@ func (c *CharLiteral) GetLine() int { return c.Line }
 func (c *CharLiteral) exprNode()    {}
 
 type BooleanLiteral struct {
+	ExprMeta
 	Line  int
 	Value bool
 }
@@ -435,6 +461,7 @@ func (b *BooleanLiteral) GetLine() int { return b.Line }
 func (b *BooleanLiteral) exprNode()    {}
 
 type ListLiteral struct {
+	ExprMeta
 	Line     int
 	Elements []Expression
 }
@@ -443,6 +470,7 @@ func (l *ListLiteral) GetLine() int { return l.Line }
 func (l *ListLiteral) exprNode()    {}
 
 type DictLiteral struct {
+	ExprMeta
 	Line  int
 	Pairs map[Expression]Expression
 }
@@ -450,7 +478,10 @@ type DictLiteral struct {
 func (d *DictLiteral) GetLine() int { return d.Line }
 func (d *DictLiteral) exprNode()    {}
 
-type SelfExpr struct{ Line int }
+type SelfExpr struct {
+	ExprMeta
+	Line int
+}
 
 func (s *SelfExpr) GetLine() int { return s.Line }
 func (s *SelfExpr) exprNode()    {}

@@ -1,0 +1,19 @@
+/* exemplo de recursao */
+
+func fatorial(n: i32) -> i32
+{
+  if (n == 0 or n == 1)
+  {
+    return 1
+  }
+  else {
+    return n * fatorial(n - 1)
+  }
+}
+
+func main()
+{
+  print("CALCULA O FATORIAL RECURSIVO")
+  let valor: i32 = 10
+  print("Fatorial: ", fatorial(valor))
+}
