@@ -456,6 +456,14 @@ func (gen *TACGenerator) genAssignment(node *ast.Assignment) {
 func (gen *TACGenerator) genVarDecl(node *ast.VarDecl) {
 	if node.Value != nil {
 		initializer := gen.Generate(node.Value)
+		// For composite types ([T] and (T0,...)), propagate the declared type
+		// to the initializer temp. This ensures cgen uses "[i32]" rather than
+		// the literal-inferred "[int]" when emitting struct typedefs.
+		if len(node.Type) >= 2 && (node.Type[0] == '[' || node.Type[0] == '(') {
+			if _, isTemp := gen.tempTypes[initializer]; isTemp {
+				gen.tempTypes[initializer] = node.Type
+			}
+		}
 		gen.emit("ASSIGN", initializer, "", node.Name)
 	} else {
 		zeroInitiation := gen.getZeroForType(node.Type)
