@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"minipar/ast"
+	"minipar/cgen"
 	"minipar/parser"
 	"minipar/semantic"
 	"minipar/tac"
@@ -35,4 +36,20 @@ func (c *Compiler) Compile(src string) (*ast.Program, string, []string) {
 	gen := tac.New()
 	gen.Generate(program)
 	return program, gen.Instructions(), errs
+}
+
+// CompileToC runs the full pipeline and returns generated C code instead of TAC.
+func (c *Compiler) CompileToC(src string) (*ast.Program, string, []string) {
+	program, errs := c.parser.ParseProgram(src)
+	if len(errs) > 0 {
+		return program, "", errs
+	}
+	an := semantic.New()
+	if errs = an.Analyze(program); len(errs) > 0 {
+		return program, "", errs
+	}
+	gen := tac.New()
+	gen.Generate(program)
+	cg := cgen.New(gen.RawInstructions(), gen.TempTypes(), an.GlobalScope())
+	return program, cg.Generate(), nil
 }
