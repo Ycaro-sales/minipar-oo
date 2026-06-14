@@ -61,6 +61,36 @@ func New() *TACGenerator {
 // TempType returns the resolved type recorded for a temporary, or "" if unknown.
 func (gen *TACGenerator) TempType(name string) string { return gen.tempTypes[name] }
 
+// TempTypes returns a copy of the temp-name → resolved-type map for use by
+// downstream passes (e.g. the C code generator).
+func (gen *TACGenerator) TempTypes() map[string]string {
+	out := make(map[string]string, len(gen.tempTypes))
+	for k, v := range gen.tempTypes {
+		out[k] = v
+	}
+	return out
+}
+
+// Instruction is the exported view of a single TAC instruction, for use by
+// downstream passes (e.g. the C code generator).
+type Instruction struct {
+	Op     string
+	Arg1   string
+	Arg2   string
+	Result string
+}
+
+// RawInstructions returns the generated instructions as a slice of Instruction,
+// for use by downstream passes that need structured access rather than the
+// formatted string from Instructions().
+func (gen *TACGenerator) RawInstructions() []Instruction {
+	out := make([]Instruction, len(gen.instructions))
+	for i, t := range gen.instructions {
+		out[i] = Instruction{Op: t.op, Arg1: t.arg1, Arg2: t.arg2, Result: t.result}
+	}
+	return out
+}
+
 // Instructions returns the generated TAC as one instruction per line.
 func (gen *TACGenerator) Instructions() string {
 	var b strings.Builder
@@ -586,7 +616,7 @@ func (gen *TACGenerator) genChannelStmt(node *ast.ChannelStmt) string {
 // ==========================================
 
 func (gen *TACGenerator) genFuncDecl(node *ast.FuncDecl) string {
-	gen.emit("BEGIN_FUNC", node.Name, "", "")
+	gen.emit("BEGIN_FUNC", node.Name, node.ReturnType, "")
 	for _, param := range node.Params {
 		gen.emit("PARAM_DECL", param.Name, param.Type, "")
 	}
@@ -632,7 +662,7 @@ func (gen *TACGenerator) genConstructorDecl(node *ast.ConstructorDecl) string {
 }
 
 func (gen *TACGenerator) genMethodDecl(node *ast.MethodDecl) string {
-	gen.emit("BEGIN_METHOD", node.Name, "", "")
+	gen.emit("BEGIN_METHOD", node.Name, node.ReturnType, "")
 	for _, param := range node.Params {
 		gen.emit("PARAM_DECL", param.Name, param.Type, "")
 	}
