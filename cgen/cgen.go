@@ -170,6 +170,15 @@ func mapType(miniparType string) string {
 	}
 }
 
+// builtinCName mapeia nomes de builtins minipar para a função C equivalente.
+// Apenas os casos que precisam de renomeação estão aqui; "isalpha" já tem o
+// mesmo nome na libc e não precisa de entrada.
+var builtinCName = map[string]string{
+	"len":       "strlen",
+	"to_number": "atoi",
+	"isnum":     "isdigit",
+}
+
 // splitTypeList divide uma lista de tipos separados por vírgula, respeitando
 // profundidade de colchetes/parênteses (para tipos compostos aninhados).
 func splitTypeList(s string) []string {
@@ -254,14 +263,66 @@ func (g *CGenerator) emitCompositeTypedefs() {
 	}
 }
 
+// builtinUsage rastreia quais builtins/helpers são necessários no preâmbulo.
+type builtinUsage struct {
+	toString bool // helper próprio: to_string(long long)
+	mpInput  bool // helper próprio: mp_input()
+	ctype    bool // necessário #include <ctype.h> (isalpha ou isnum/isdigit)
+}
+
+// scanBuiltins faz uma única passada pelas instruções para detectar quais
+// builtins são utilizados, evitando emitir helpers/includes desnecessários.
+func (g *CGenerator) scanBuiltins() builtinUsage {
+	var u builtinUsage
+	for _, instr := range g.instrs {
+		switch instr.Op {
+		case "CALL":
+			switch instr.Arg1 {
+			case "to_string":
+				u.toString = true
+			case "isalpha", "isnum":
+				u.ctype = true
+			}
+		case "INPUT":
+			u.mpInput = true
+		}
+	}
+	return u
+}
+
+// emitBuiltinHelpers escreve no preâmbulo as definições dos helpers próprios
+// (aqueles sem equivalente direto na libc) que foram detectados no pré-scan.
+func (g *CGenerator) emitBuiltinHelpers(u builtinUsage) {
+	if u.toString {
+		g.buf.WriteString("static char* to_string(long long v) {\n")
+		g.buf.WriteString("    static char b[32];\n")
+		g.buf.WriteString("    snprintf(b, sizeof b, \"%lld\", v);\n")
+		g.buf.WriteString("    return b;\n")
+		g.buf.WriteString("}\n")
+	}
+	if u.mpInput {
+		g.buf.WriteString("static char* mp_input(void) {\n")
+		g.buf.WriteString("    static char b[256];\n")
+		g.buf.WriteString("    if (fgets(b, sizeof b, stdin)) b[strcspn(b, \"\\n\")] = '\\0';\n")
+		g.buf.WriteString("    return b;\n")
+		g.buf.WriteString("}\n")
+	}
+}
+
 func (g *CGenerator) Generate() string {
+	usage := g.scanBuiltins()
+
 	g.buf.WriteString("#include <stdint.h>\n")
 	g.buf.WriteString("#include <stdbool.h>\n")
 	g.buf.WriteString("#include <stdio.h>\n")
 	g.buf.WriteString("#include <stdlib.h>\n")
 	g.buf.WriteString("#include <string.h>\n")
+	if usage.ctype {
+		g.buf.WriteString("#include <ctype.h>\n")
+	}
 	g.buf.WriteByte('\n')
 	g.emitCompositeTypedefs()
+	g.emitBuiltinHelpers(usage)
 	g.buf.WriteByte('\n')
 
 	for i := 0; i < len(g.instrs); i++ {
@@ -295,12 +356,17 @@ func (g *CGenerator) Generate() string {
 		case "CALL":
 			args := strings.Join(g.paramBuf, ", ")
 			g.paramBuf = g.paramBuf[:0]
+			// Traduzir nome do builtin para a função C equivalente (quando houver).
+			callName := instr.Arg1
+			if cName, ok := builtinCName[callName]; ok {
+				callName = cName
+			}
 			retType := g.resolveType(instr.Result)
 			if retType == "void" || retType == "" {
-				g.buf.WriteString(fmt.Sprintf("%s%s(%s);\n", g.ind(), instr.Arg1, args))
+				g.buf.WriteString(fmt.Sprintf("%s%s(%s);\n", g.ind(), callName, args))
 			} else {
 				prefix := g.declPrefix(instr.Result)
-				g.buf.WriteString(fmt.Sprintf("%s%s%s = %s(%s);\n", g.ind(), prefix, instr.Result, instr.Arg1, args))
+				g.buf.WriteString(fmt.Sprintf("%s%s%s = %s(%s);\n", g.ind(), prefix, instr.Result, callName, args))
 			}
 
 		case "ASSIGN":
@@ -407,6 +473,16 @@ func (g *CGenerator) Generate() string {
 			// Standalone TUPLE_SET: Arg1=tuple, Arg2=index, Result=value
 			g.buf.WriteString(fmt.Sprintf("%s%s._%s = %s;\n",
 				g.ind(), instr.Arg1, instr.Arg2, instr.Result))
+
+		case "INPUT":
+			// Arg1 = prompt (pode ser ""), Result = temp que recebe o valor lido.
+			if instr.Arg1 != "" {
+				g.buf.WriteString(fmt.Sprintf("%sprintf(\"%%s\", %s);\n", g.ind(), instr.Arg1))
+			}
+			// Força o tipo do resultado para "string" (o TAC cria o temp sem tipo).
+			g.tempTypes[instr.Result] = "string"
+			prefix := g.declPrefix(instr.Result)
+			g.buf.WriteString(fmt.Sprintf("%s%s%s = mp_input();\n", g.ind(), prefix, instr.Result))
 
 		case "PRINT":
 			g.buf.WriteString(fmt.Sprintf("%sprintf(\"%s\\n\", %s);\n", g.ind(), g.printFmt(instr.Arg1), instr.Arg1))

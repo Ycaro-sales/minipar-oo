@@ -62,27 +62,27 @@ go test ./...
 - **Variáveis globais:** declaradas fora de funções
 - **Arrays estáticos `[T]`:** declaração, literal `[v0, v1, ...]`, acesso `arr[i]`, mutação `arr[i] = x`, passagem para funções (struct com ponteiro compartilhado), `for (x in arr)`
 - **Tuplas `(T0, T1, ...)`:** declaração, literal `(v0, v1)`, acesso por índice constante; imutáveis por design
+- **Funções built-in:** `print`, `input`, `len`, `to_string`, `to_number`, `isalpha`, `isnum` — geração C completa (ver tabela abaixo)
 
-### ⚠️ Funções built-in (semântico ok, C não implementado)
+### ✅ Funções built-in (geração C implementada)
 
-O analisador semântico registra as seguintes funções nativas. No C gerado elas precisam de implementação via macro ou função auxiliar emitida no preâmbulo — hoje o cgen não gera esse código.
-
-| Função | Retorno | Equivalente C sugerido |
-|--------|---------|------------------------|
-| `print(x)` | `void` | `printf` (já funciona via instrução TAC `PRINT`) |
-| `input()` | `string` | `scanf` / `fgets` — TAC emite `INPUT`, cgen descarta |
-| `len(x)` | `int` | `strlen(x)` para strings; `arr.len` para arrays (já funciona via TAC `ARRAY_LEN`) |
-| `to_string(x)` | `string` | `sprintf` em buffer estático |
-| `to_number(x)` | `int` | `atoi(x)` |
-| `isalpha(x)` | `bool` | `isalpha(x)` de `<ctype.h>` |
-| `isnum(x)` | `bool` | `isdigit(x)` de `<ctype.h>` |
+| Função | Retorno | Geração C |
+|--------|---------|-----------|
+| `print(x)` | `void` | `printf` via instrução TAC `PRINT` |
+| `input([prompt])` | `string` | helper `mp_input()` emitido no preâmbulo; prompt via `printf` |
+| `len(x)` | `int` | traduzido para `strlen(x)` (`<string.h>`); comprimento de array via `ARRAY_LEN` → `.len` |
+| `to_string(x)` | `string` | helper `static char* to_string(long long)` com `snprintf` emitido no preâmbulo |
+| `to_number(x)` | `int` | traduzido para `atoi(x)` (`<stdlib.h>`) |
+| `isalpha(x)` | `bool` | traduzido para `isalpha(x)` de `<ctype.h>` |
+| `isnum(x)` | `bool` | traduzido para `isdigit(x)` de `<ctype.h>` |
 | `arr.append(elem)` | `void` | não suportado (exige array dinâmico; fora do escopo atual) |
+
+> **Nota:** `<ctype.h>` é incluído automaticamente apenas quando `isalpha` ou `isnum` é usado no programa. Helpers próprios (`to_string`, `mp_input`) são emitidos no preâmbulo somente quando usados, evitando warnings de funções estáticas não utilizadas.
 
 ### ⚠️ TAC gerado, mas geração C incompleta
 
 | Construção | Situação |
 |---|---|
-| `input()` | TAC emite `INPUT`, cgen descarta silenciosamente |
 | `METHOD_CALL obj.m n` | TAC emite, cgen descarta (exceto em contexto de classe) |
 | `NEW_OBJ Classe n` | TAC emite, cgen descarta silenciosamente |
 | `par { }` | Emite comentário `/* BEGIN_PAR — pthreads: TODO */`; corpo executado sequencialmente |
@@ -104,9 +104,8 @@ Estas construções foram avaliadas e **não serão implementadas** na versão a
 
 ## Próximos passos
 
-1. **`input()`** — implementar `scanf`/`fgets` no cgen
-2. **`to_string`, `to_number`, `isalpha`, `isnum`** — emitir funções auxiliares C no preâmbulo do arquivo gerado
-3. **Paralelismo real** — substituir os stubs `BEGIN_PAR`/`END_PAR` por `pthread_create`
+1. **Paralelismo real** — substituir os stubs `BEGIN_PAR`/`END_PAR` por `pthread_create`
+2. **Indexação de string como char** — `ARRAY_GET` em `char*` deve emitir `s[i]` (acesso direto) em vez de `s.data[i]` (struct de array), habilitando `isalpha(message[index])` do ex7
 
 ---
 
