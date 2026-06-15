@@ -111,6 +111,8 @@ func (a *Analyzer) collectDeclarations(prog *ast.Program) {
 			a.interfaces[n.Name] = &ifaceInfo{name: n.Name, methods: map[string]*Type{}}
 			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Interface, Line: n.Line,
 				Type: &Type{Name: n.Name, Kind: KindInterface}})
+		case *ast.ChannelStmt:
+			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Var, Line: n.Line, Type: tChan})
 		}
 	}
 
@@ -245,7 +247,11 @@ func (a *Analyzer) checkDeclarations(prog *ast.Program) {
 		case *ast.ClassDecl:
 			a.checkClass(n)
 		case *ast.InterfaceDecl:
-			// signatures only; nothing to check in a body
+		case *ast.ChannelStmt:
+			for _, arg := range n.Args {
+				a.checkExpr(arg)
+			}
+			// --------------------------------
 		}
 	}
 }
@@ -524,7 +530,7 @@ func (a *Analyzer) checkChannel(n *ast.ChannelStmt) {
 	for _, arg := range n.Args {
 		a.checkExpr(arg)
 	}
-	a.define(&symbol{Name: n.Name, Kind: symtab.Var, Type: tAny, Line: n.Line})
+	a.define(&symbol{Name: n.Name, Kind: symtab.Var, Type: tChan, Line: n.Line}) // <- Mudamos para tChan
 }
 
 // ==========================================

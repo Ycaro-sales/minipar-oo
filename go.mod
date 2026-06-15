@@ -1,6 +1,6 @@
 module minipar
 
-go 1.26.3
+go 1.18
 
 require (
 	github.com/yuin/goldmark v1.7.13 // indirect
