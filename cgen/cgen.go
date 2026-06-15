@@ -10,22 +10,24 @@ import (
 )
 
 type CGenerator struct {
-	instrs       []tac.Instruction
-	tempTypes    map[string]string
-	varTypes     map[string]string // nome → tipo minipar (da tabela de símbolos)
-	declaredVars map[string]bool
-	paramBuf     []string // argumentos acumulados antes de CALL
-	currentClass  string // classe em definição, para name mangling de métodos
-	insideFunc    bool  // controla indentação: global vs. dentro de função
-	buf           strings.Builder
+	instrs      []tac.Instruction
+	tempTypes   map[string]string
+	varTypes    map[string]string // nome → tipo minipar (da tabela de símbolos)
+	globalVars  map[string]bool  // declaradas no escopo global; nunca resetadas
+	localVars   map[string]bool  // declaradas na função atual; resetadas por função
+	paramBuf    []string         // argumentos acumulados antes de CALL
+	currentClass string          // classe em definição, para name mangling de métodos
+	insideFunc  bool             // controla indentação: global vs. dentro de função
+	buf         strings.Builder
 }
 
 func New(instrs []tac.Instruction, tempTypes map[string]string, globalScope *symtab.Scope[*semantic.Type]) *CGenerator {
 	g := &CGenerator{
-		instrs:       instrs,
-		tempTypes:    tempTypes,
-		varTypes:     make(map[string]string),
-		declaredVars: make(map[string]bool),
+		instrs:     instrs,
+		tempTypes:  tempTypes,
+		varTypes:   make(map[string]string),
+		globalVars: make(map[string]bool),
+		localVars:  make(map[string]bool),
 	}
 	g.collectVarTypes(globalScope)
 	return g
@@ -51,13 +53,27 @@ func (g *CGenerator) resolveType(name string) string {
 	return g.varTypes[name]
 }
 
+// isDeclared informa se name já foi declarado em qualquer escopo.
+func (g *CGenerator) isDeclared(name string) bool {
+	return g.globalVars[name] || g.localVars[name]
+}
+
+// markDeclared registra name no mapa adequado ao escopo atual.
+func (g *CGenerator) markDeclared(name string) {
+	if g.insideFunc {
+		g.localVars[name] = true
+	} else {
+		g.globalVars[name] = true
+	}
+}
+
 // declPrefix devolve o prefixo de declaração C se name ainda não foi declarado
 // ("int32_t name" na primeira ocorrência, "" nas seguintes).
 func (g *CGenerator) declPrefix(name string) string {
-	if g.declaredVars[name] {
+	if g.isDeclared(name) {
 		return ""
 	}
-	g.declaredVars[name] = true
+	g.markDeclared(name)
 	return mapType(g.resolveType(name)) + " "
 }
 
@@ -335,14 +351,15 @@ func (g *CGenerator) Generate() string {
 			}
 			// Reset per-function declared vars so parameters of previous
 			// functions do not shadow locals in this function.
-			g.declaredVars = make(map[string]bool)
+			// Globals are kept separate in globalVars and are never reset.
+			g.localVars = make(map[string]bool)
 			// Consome os PARAM_DECL seguintes para montar a lista de parâmetros.
 			var params []string
 			for i+1 < len(g.instrs) && g.instrs[i+1].Op == "PARAM_DECL" {
 				i++
 				p := g.instrs[i]
 				params = append(params, fmt.Sprintf("%s %s", mapType(p.Arg2), p.Arg1))
-				g.declaredVars[p.Arg1] = true // param already declared in signature
+				g.localVars[p.Arg1] = true // param already declared in signature
 			}
 			g.buf.WriteString(fmt.Sprintf("%s %s(%s) {\n", retC, instr.Arg1, strings.Join(params, ", ")))
 			g.insideFunc = true
@@ -433,7 +450,7 @@ func (g *CGenerator) Generate() string {
 				g.ind(), elemC, dataVar, strings.Join(values, ", ")))
 			g.buf.WriteString(fmt.Sprintf("%s%s %s = { %s, %s };\n",
 				g.ind(), typedefName, arrTemp, dataVar, count))
-			g.declaredVars[arrTemp] = true
+			g.markDeclared(arrTemp)
 
 		case "ARRAY_SET":
 			// Standalone ARRAY_SET (mutation): Arg1=array, Arg2=index, Result=value
@@ -467,7 +484,7 @@ func (g *CGenerator) Generate() string {
 
 			g.buf.WriteString(fmt.Sprintf("%s%s %s = { %s };\n",
 				g.ind(), typedefName, tupTemp, strings.Join(values, ", ")))
-			g.declaredVars[tupTemp] = true
+			g.markDeclared(tupTemp)
 
 		case "TUPLE_SET":
 			// Standalone TUPLE_SET: Arg1=tuple, Arg2=index, Result=value
@@ -523,14 +540,14 @@ func (g *CGenerator) Generate() string {
 			g.buf.WriteString("}\n")
 		case "BEGIN_METHOD":
 			retC := mapType(instr.Arg2)
-			g.declaredVars = make(map[string]bool)
-			g.declaredVars["self"] = true
+			g.localVars = make(map[string]bool)
+			g.localVars["self"] = true
 			var params []string
 			for i+1 < len(g.instrs) && g.instrs[i+1].Op == "PARAM_DECL" {
 				i++
 				p := g.instrs[i]
 				params = append(params, fmt.Sprintf("%s %s", mapType(p.Arg2), p.Arg1))
-				g.declaredVars[p.Arg1] = true
+				g.localVars[p.Arg1] = true
 			}
 			paramList := strings.Join(params, ", ")
 			if paramList != "" {

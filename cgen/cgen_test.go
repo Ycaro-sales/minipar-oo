@@ -115,6 +115,21 @@ func main() {
 	assertContains(t, out, "x = 2;")
 }
 
+func TestGlobalAssignInsideFuncNoRedecl(t *testing.T) {
+	out := compileToC(t, `let a: i32 = 10
+func main() {
+    a = a + 1
+    print(a)
+}`)
+	// declaração global deve existir exatamente uma vez
+	count := strings.Count(out, "int32_t a")
+	if count != 1 {
+		t.Errorf("want exactly 1 declaration of 'int32_t a', got %d\n--- output ---\n%s", count, out)
+	}
+	// dentro de main a atribuição não deve ter prefixo de tipo
+	assertNotContains(t, out, "int32_t a = t")
+}
+
 // ==========================================
 // ARITMÉTICA
 // ==========================================
