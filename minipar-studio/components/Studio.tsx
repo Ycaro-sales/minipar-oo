@@ -16,12 +16,11 @@ import {
   Check,
   Trash2,
   ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 
-// importação dinâmica do editor para evitar problemas de SSR.
 const Editor = dynamic(() => import("react-simple-code-editor"), { ssr: false });
 
-// definir aqui os tokens para a linguagem minipar no Prism, para realce de sintaxe do editor
 if (typeof window !== "undefined") {
   Prism.languages.minipar = {
     comment: [/#.*/, /\/\*[\s\S]*?\*\//],
@@ -37,80 +36,24 @@ if (typeof window !== "undefined") {
   };
 }
 
-
-// aqui ficam os exemplos rapidos de codigos minipar para popular o editor.
 const EXAMPLES: Record<string, string> = {
-  "Hello World": `# Hello World\nprint("Hello, World!")\nprint("Welcome to Minipar!")\n`,
-  "Variáveis & Aritmética": `var x: number = 10\nvar y: number = 5\n\nprint("x + y =", x + y)\nprint("x * y =", x * y)\n`,
-  Funções: `func add(a: number, b: number) -> number {\n    return a + b\n}\n\nprint("10 + 5 =", add(10, 5))\n`,
-  Loops: `var n: number = 5\nwhile (n >= 0) {\n    print(n)\n    n = n - 1\n}\nprint("Liftoff!")\n`,
-  "Fatorial Recursivo": `func fat(n: number) -> number {\n    if (n == 0 || n == 1) { return 1 }\n    else { return n * fat(n - 1) }\n}\n\nprint("5! =", fat(5))\nprint("10! =", fat(10))\n`,
+  "Hello World": `func main()\n{\n    print("Hello, World!")\n    print("Welcome to Minipar!")\n}\n`,
+  "Variáveis & Aritmética": `func main()\n{\n    let x: i32 = 10\n    let y: i32 = 5\n    print("x + y =", x + y)\n    print("x * y =", x * y)\n}\n`,
+  Funções: `func add(a: i32, b: i32) -> i32\n{\n    return a + b\n}\n\nfunc main()\n{\n    print("10 + 5 =", add(10, 5))\n}\n`,
+  Loops: `func main()\n{\n    let n: i32 = 5\n    while (n >= 0)\n    {\n        print(n)\n        n = n - 1\n    }\n    print("Liftoff!")\n}\n`,
+  "Fatorial Recursivo": `func fat(n: i32) -> i32\n{\n    if (n == 0 or n == 1) { return 1 }\n    else { return n * fat(n - 1) }\n}\n\nfunc main()\n{\n    print("5! =", fat(5))\n    print("10! =", fat(10))\n}\n`,
 };
 
-type Stage = { key: string; label: string; icon: string };
+type StageKey = "tokens" | "ast" | "tac" | "c";
+
+type Stage = { key: StageKey; label: string; icon: string };
 
 const STAGES: Stage[] = [
-  { key: "tokens", label: "Tokens", icon: "🔤" },
-  { key: "ast", label: "AST", icon: "🌳" },
-  { key: "semantic", label: "Semântico", icon: "✓" },
-  { key: "tac", label: "TAC", icon: "📝" },
-  { key: "c", label: "C Code", icon: "⚙️" },
-  { key: "asm", label: "Assembly", icon: "🔧" },
+  { key: "tokens", label: "Tokens",  icon: "🔤" },
+  { key: "ast",    label: "AST",     icon: "🌳" },
+  { key: "tac",    label: "TAC",     icon: "📝" },
+  { key: "c",      label: "C Code",  icon: "⚙️"  },
 ];
-
-// ---- ABAIXO SÃO FUNÇÕES MOCKADAS PARA SIMULAR A COMPILAÇÃO E EXECUÇÃO, APENAS PARA DEMONSTRAÇÃO VISUAL ----
-// criar api next.js para chamar o cli do minipar via api
-function mockStage(stage: string, code: string): string {
-  const lines = code.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#"));
-  switch (stage) {
-    case "tokens":
-      return lines
-        .slice(0, 6)
-        .map(
-          (l, i) =>
-            `[${String(i + 1).padStart(2, "0")}] ${l
-              .trim()
-              .split(/\s+/)
-              .map((t) => `‹${t}›`)
-              .join(" ")}`
-        )
-        .join("\n");
-    case "ast":
-      return `Program\n├── Decl(var)\n├── Call(print)\n└── Block`;
-    case "semantic":
-      return "✓ Tipos consistentes\n✓ Símbolos resolvidos\n✓ Sem warnings";
-    case "tac":
-      return "t1 = 10\nt2 = 5\nt3 = t1 + t2\nprint t3";
-    case "c":
-      return `#include <stdio.h>\nint main(){ printf("Hello\\n"); return 0; }`;
-    case "asm":
-      return ".global _start\n_start:\n  mov r0, #0\n  bx lr";
-    default:
-      return "";
-  }
-}
-
-function mockExecute(code: string, stdin: string): string {
-  const prints: string[] = [];
-  const re = /print\(([^)]*)\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(code))) {
-    const args = m[1]
-      .split(",")
-      .map((a) => a.trim().replace(/^"|"$/g, ""))
-      .join(" ");
-    prints.push(args);
-  }
-  const inputs = stdin.split("\n").filter(Boolean);
-  if (inputs.length) prints.push(`> stdin: ${inputs.join(" | ")}`);
-  return prints.length
-    ? prints.join("\n") + "\n\n✓ Programa finalizado (exit 0)"
-    : "(sem saída)\n\n✓ Programa finalizado (exit 0)";
-}
-
-// ---- fim das funções mockadas ----
-
-// componente de botão para as abas de compilação e execução, com ícones e estilos dinâmicos
 
 function TabButton({
   active,
@@ -138,57 +81,142 @@ function TabButton({
   );
 }
 
-// função principal do componente Studio, que contém toda a lógica de estado e renderização da interface, incluindo editor de código, opções de compilação, e área de saída.
 export default function Studio() {
   const [code, setCode] = useState(EXAMPLES["Hello World"]);
   const [tab, setTab] = useState<"compile" | "execute">("compile");
-  const [stages, setStages] = useState<Record<string, boolean>>({
+  const [stages, setStages] = useState<Record<StageKey, boolean>>({
     tokens: false,
     ast: false,
-    semantic: false,
     tac: true,
     c: false,
-    asm: false,
   });
   const [output, setOutput] = useState<string>(
     "// A saída aparecerá aqui após compilar ou executar."
   );
-  const [stdin, setStdin] = useState("");
+  const [isError, setIsError] = useState(false);
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const lineCount = useMemo(() => code.split("\n").length, [code]);
 
-  // função de chamada do botão compilar. editar quando cli estiver pronto.
-  function handleCompile() {
+  async function handleCompile() {
     setRunning(true);
-    setTimeout(() => {
-      const enabled = STAGES.filter((s) => stages[s.key]);
-      const parts: string[] = [];
-      parts.push(`▸ Compilação iniciada · ${lineCount} linhas`);
-      parts.push(`▸ Etapas: ${enabled.map((s) => s.label).join(", ") || "—"}`);
-      parts.push("");
-      enabled.forEach((s) => {
-        parts.push(`── ${s.icon} ${s.label} ──────────────────────`);
-        parts.push(mockStage(s.key, code));
-        parts.push("");
+    setIsError(false);
+    try {
+      const res = await fetch("/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, stages }),
       });
+
+      const data = await res.json() as {
+        success: boolean;
+        stages: { key: string; label: string; icon: string; content: string }[];
+        error?: string;
+      };
+
+      if (!data.success) {
+        setIsError(true);
+        setOutput(data.error || "Erro desconhecido na compilação.");
+        return;
+      }
+
+      if (data.stages.length === 0) {
+        setOutput("✓ Compilado com sucesso.");
+        return;
+      }
+
+      const parts: string[] = [];
+      parts.push(`▸ Compilação concluída · ${lineCount} linha${lineCount !== 1 ? "s" : ""}`);
+      parts.push(`▸ Etapas: ${data.stages.map((s) => s.label).join(", ")}`);
+      parts.push("");
+
+      for (const s of data.stages) {
+        parts.push(`── ${s.icon} ${s.label} ${"─".repeat(Math.max(0, 38 - s.label.length))}`);
+        parts.push(s.content);
+        parts.push("");
+      }
+
       parts.push("✓ Compilado com sucesso.");
       setOutput(parts.join("\n"));
+    } catch (err) {
+      setIsError(true);
+      setOutput(`Erro ao conectar com o servidor:\n${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setRunning(false);
-    }, 400);
+    }
   }
 
-  // função de chamada do botão executar. editar quando cli estiver pronto.
-  function handleRun() {
+  async function handleDownload() {
     setRunning(true);
-    setTimeout(() => {
-      setOutput(mockExecute(code, stdin));
+    setIsError(false);
+    try {
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        setIsError(true);
+        setOutput(data?.error || "Erro ao gerar o binário.");
+        return;
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition");
+      const match = disposition?.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] ?? "main";
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      setOutput(`✓ Binário "${filename}" baixado com sucesso.`);
+    } catch (err) {
+      setIsError(true);
+      setOutput(`Erro ao baixar o binário:\n${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setRunning(false);
-    }, 350);
+    }
   }
 
-  // função para copiar a saída para a área de transferência, com feedback visual de "copiado".
+  async function handleRun() {
+    setRunning(true);
+    setIsError(false);
+    try {
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      const data = await res.json() as {
+        success: boolean;
+        output: string;
+        exitCode: number;
+        error?: string;
+      };
+
+      if (!data.success) {
+        setIsError(true);
+        setOutput(data.error || data.output || "Erro na execução.");
+        return;
+      }
+
+      setOutput(data.output);
+    } catch (err) {
+      setIsError(true);
+      setOutput(`Erro ao conectar com o servidor:\n${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function copyOut() {
     navigator.clipboard.writeText(output);
     setCopied(true);
@@ -209,15 +237,23 @@ export default function Studio() {
                 Minipar Studio
               </h1>
               <p className="truncate text-xs text-muted-foreground">
-                IDE web · compile · execute · explore
+                IDE | Compiler | Runner
               </p>
             </div>
           </div>
           <nav className="flex items-center gap-1 sm:gap-2">
-            <TabButton active={tab === "compile"} onClick={() => setTab("compile")} icon={<Hammer className="h-4 w-4" />}>
+            <TabButton
+              active={tab === "compile"}
+              onClick={() => setTab("compile")}
+              icon={<Hammer className="h-4 w-4" />}
+            >
               Compilar
             </TabButton>
-            <TabButton active={tab === "execute"} onClick={() => setTab("execute")} icon={<Play className="h-4 w-4" />}>
+            <TabButton
+              active={tab === "execute"}
+              onClick={() => setTab("execute")}
+              icon={<Play className="h-4 w-4" />}
+            >
               Executar
             </TabButton>
           </nav>
@@ -227,7 +263,7 @@ export default function Studio() {
       {/* Main */}
       <main className="flex-1 mx-auto w-full max-w-[1600px] px-4 sm:px-6 py-4 sm:py-6">
         <div className="grid gap-4 lg:gap-6 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]">
-          {/* Sidebar examples */}
+          {/* Sidebar */}
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -260,14 +296,14 @@ export default function Studio() {
 
           {/* Workspace */}
           <section className="grid gap-4 lg:gap-6 lg:grid-cols-2 min-w-0">
-            {/* Editor */}
+            {/* Editor panel */}
             <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col min-w-0">
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2 min-w-0">
                   <Code2 className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm font-medium truncate">main.minipar</span>
                   <span className="text-xs text-muted-foreground hidden sm:inline">
-                    · {lineCount} linhas
+                    · {lineCount} linha{lineCount !== 1 ? "s" : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -314,7 +350,7 @@ export default function Studio() {
                   <>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Settings2 className="h-3.5 w-3.5" />
-                      Etapas da compilação
+                      Etapas intermediárias
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {STAGES.map((s) => (
@@ -340,42 +376,43 @@ export default function Studio() {
                         disabled={running}
                         className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:opacity-95 disabled:opacity-60 transition"
                       >
-                        <Hammer className="h-4 w-4" /> Compilar
+                        <Hammer className="h-4 w-4" />
+                        {running ? "Compilando…" : "Compilar"}
                       </button>
-                      <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-4 py-2.5 text-sm hover:bg-muted transition">
-                        <Download className="h-4 w-4" /> Baixar binário
+                      <button
+                        onClick={handleDownload}
+                        disabled={running}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-4 py-2.5 text-sm hover:bg-secondary/80 disabled:opacity-60 transition"
+                      >
+                        <Download className="h-4 w-4" />
+                        {running ? "Gerando…" : "Baixar binário"}
                       </button>
                     </div>
                   </>
                 ) : (
                   <>
-                    <label className="block text-xs text-muted-foreground">
-                      Entrada do programa (stdin)
-                    </label>
-                    <textarea
-                      value={stdin}
-                      onChange={(e) => setStdin(e.target.value)}
-                      rows={2}
-                      placeholder="Um valor por linha…"
-                      className="w-full rounded-lg bg-editor border border-border px-3 py-2 text-sm font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                    />
                     <button
                       onClick={handleRun}
                       disabled={running}
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-accent/30 hover:opacity-95 disabled:opacity-60 transition"
                     >
-                      <Play className="h-4 w-4" /> Executar
+                      <Play className="h-4 w-4" />
+                      {running ? "Executando…" : "Executar"}
                     </button>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Output */}
+            {/* Output panel */}
             <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col min-h-[400px] min-w-0">
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Terminal className="h-4 w-4 text-accent shrink-0" />
+                  {isError ? (
+                    <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                  ) : (
+                    <Terminal className="h-4 w-4 text-accent shrink-0" />
+                  )}
                   <span className="text-sm font-medium truncate">
                     {tab === "compile" ? "Saída da compilação" : "Saída de execução"}
                   </span>
@@ -401,7 +438,11 @@ export default function Studio() {
                   )}
                 </button>
               </div>
-              <pre className="flex-1 p-4 text-sm font-mono leading-relaxed text-foreground/90 whitespace-pre-wrap overflow-auto scrollbar-thin bg-editor">
+              <pre
+                className={`flex-1 p-4 text-sm font-mono leading-relaxed whitespace-pre-wrap overflow-auto scrollbar-thin bg-editor ${
+                  isError ? "text-destructive/90" : "text-foreground/90"
+                }`}
+              >
                 {output}
               </pre>
             </div>
@@ -409,14 +450,9 @@ export default function Studio() {
         </div>
       </main>
 
-      <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">
-  <p className="font-semibold">Minipar Studio</p>
-  <p className="mt-1">IDE e interface de compilação web, para a linguagem de programação Minipar</p>
-  <p className="mt-2 text-xs">
-    Desenvolvido por: <span className="font-medium">Felipe Lira, Gabriel Seixas, Marcos Mendonça, Wyvian Valença e Ycaro Sales</span>
-  </p>
-</footer>
-
+      <footer className="border-t border-border py-4 text-center text-xs text-muted-foreground">
+        Minipar Studio · Projeto de Compiladores 2026.1 UFAL
+      </footer>
     </div>
   );
 }
