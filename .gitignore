@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# mcc build artifact
+/mcc
+
 # Editor/IDE
 # .idea/
 # .vscode/

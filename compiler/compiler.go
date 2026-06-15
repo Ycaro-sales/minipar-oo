@@ -1,8 +1,12 @@
 package compiler
 
 import (
+	"fmt"
+	"strings"
+
 	"minipar/ast"
 	"minipar/cgen"
+	"minipar/lexer"
 	"minipar/parser"
 	"minipar/semantic"
 	"minipar/tac"
@@ -16,6 +20,36 @@ type Compiler struct {
 
 func New(p parser.Parser) *Compiler {
 	return &Compiler{parser: p}
+}
+
+// Tokenize lexes src and returns a formatted listing of all tokens (excluding
+// the final EOF), one per line in the format:
+//
+//	<line>  <type>  <literal>
+func (c *Compiler) Tokenize(src string) string {
+	l := lexer.New(src)
+	var b strings.Builder
+	for {
+		tok := l.NextToken()
+		if tok.Type == lexer.EOF {
+			break
+		}
+		fmt.Fprintf(&b, "%d\t%s\t%s\n", tok.Line, tok.Type, tok.Literal)
+	}
+	return b.String()
+}
+
+// AST parses src and runs semantic analysis, stopping before TAC generation.
+// It returns the (possibly partial) AST and any accumulated error messages.
+// Use this when only parse/semantic information is needed and TAC generation
+// might not yet be supported for the given constructs.
+func (c *Compiler) AST(src string) (*ast.Program, []string) {
+	program, errs := c.parser.ParseProgram(src)
+	if len(errs) > 0 {
+		return program, errs
+	}
+	errs = semantic.New().Analyze(program)
+	return program, errs
 }
 
 // Compile runs the full pipeline: it parses src, runs semantic analysis when
