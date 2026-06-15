@@ -1,0 +1,26 @@
+# Calculator Server
+# Run this first in one terminal
+
+# Define the calculator function
+func calcular(op: string, v1: f64, v2: f64) -> f64
+{
+  switch (op)
+  {
+    "+" => { return v1 + v2 }
+    "-" => { return v1 - v2 }
+    "*" => { return v1 * v2 }
+    "/" => { return v1 / v2 }
+  }
+
+  return 0
+}
+
+# Create server channel
+let desc: string = "Calculadora Servidor - Digite: operacao,num1,num2"
+s_channel calculadora_server(calcular, desc, "localhost", 5000)
+
+func main()
+{
+  print("Starting Calculator Server...")
+  print("Server is ready and waiting for connections...")
+}

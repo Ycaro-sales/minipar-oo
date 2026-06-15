@@ -1,0 +1,122 @@
+<program> ::= <declaration>+
+<declaration> ::= <class_decl> | <interface_decl> | <func_decl> | <var_decl>
+
+/* ORIENTAÇÃO À OBJETOS */
+<class_decl> ::= "class" <id> ("implements" "(" <id> ("," <id>)* ")")? "{" <class_member>* "}"
+<class_member> ::= <field_decl> | <constructor_decl> | <method_decl>
+<field_decl> ::= <id> ":" <type> ("=" <expr>)? ";"?
+<constructor_decl> ::= <id> "{" <block> "}"
+<method_decl> ::= "func" <id> "(" <params>? ")" ("->" <type>)? "{" <block> "}"
+<method_call> ::= <expr> "." <id> "(" <args>? ")"
+<obj_creation> ::= <id> "(" <args>? ")"
+
+/* INTERFACES */
+<interface_decl> ::= "interface" <id> "{" <interface_method>* "}"
+<interface_method> ::= "func" <id> "(" <params>? ")" ("->" <type>)?
+
+/* FUNÇÕES */
+<func_decl> ::= "func" <id> "(" <params>? ")" ("->" <type>)? "{" <block> "}"
+<func_literal> ::= "func" "(" <params>? ")" ("->" <type>)? "{" <block> "}"
+<params> ::= <param> ("," <param>)*
+<param> ::= <id> (":" <type>)?
+<func_call> ::= <id> "(" <args>? ")"
+<args> ::= <expr> ("," <expr>)*
+
+/* VARIÁVEIS */
+<var_decl> ::= "let" <id> (":" <type>)? "=" <expr> ";"
+<assignment> ::= <id> "=" <expr> ";"
+              | <id> ("[" <expr> "]")+ "=" <expr> ";"
+
+/* COMANDOS */
+<block> ::= <stmt>*
+<stmt> ::= <if_stmt>
+         | <while_stmt>
+         | <do_stmt>
+         | <for_stmt>
+         | <switch_stmt>
+         | <seq_stmt>
+         | <par_stmt>
+         | <channel_stmt>
+         | <var_decl>
+         | <assignment>
+         | <func_call> ";"
+         | <method_call> ";"
+         | <print_call>
+         | <input_call>
+         | "return" <expr>? ";"
+         | "break" ";"
+         | "continue" ";"
+         | "pass" ";"
+         | "goto" <id> ";"
+<if_stmt> ::= "if" "(" <expr> ")" "{" <block> "}" ("else" "{" <block> "}")?
+<while_stmt> ::= "while" "(" <expr> ")" "{" <block> "}"
+<do_stmt> ::= "do" "{" <block> "}" "while" "(" <expr> ")"
+<for_stmt> ::= "for" "(" <id> "in" <expr> ")" "{" <block> "}"
+<switch_stmt> ::= "switch" "(" <expr> ")" "{" <case_clause>+ "}"
+<case_clause> ::= <expr> "=>" "{" <block> "}"
+<seq_stmt> ::= "seq" "{" <block> "}"
+<par_stmt> ::= "par" "{" <block> "}"
+<print_call> ::= "print" "(" <args>? ")" ";"
+<input_call> ::= "input" "(" <string>? ")" ";"
+
+/* CANAIS */
+<channel_stmt> ::= <s_channel_stmt> | <c_channel_stmt>
+<s_channel_stmt> ::= "s_channel" <id> "(" <args>? ")" ";"
+<c_channel_stmt> ::= "c_channel" <id> "(" <args>? ")" ";"
+
+/* EXPRESSOES */
+<expr> ::= <or_expr>
+<or_expr> ::= <and_expr> ("or" <and_expr>)*
+<and_expr> ::= <comparison_expr> ("and" <comparison_expr>)*
+<comparison_expr> ::= <additive_expr> (("==" | "!=" | "<" | ">" | "<=" | ">=") <additive_expr>)*
+<additive_expr> ::= <multiplicative_expr> (("+" | "-") <multiplicative_expr>)*
+<multiplicative_expr> ::= <unary_expr> (("*" | "/" | "%") <unary_expr>)*
+<unary_expr> ::= ("-" | "!") <unary_expr> | <postfix_expr>
+<postfix_expr> ::= <primary_expr> ("." <id> "(" <args>? ")" | "[" <expr> "]")*
+<primary_expr> ::= <number>
+                 | <string>
+                 | <char_literal>
+                 | "true"
+                 | "false"
+                 | "Self"
+                 | <id>
+                 | <obj_creation>
+                 | <list_literal>
+                 | <dict_literal>
+                 | <set_literal>
+                 | <tuple_literal>
+                 | <func_literal>
+                 | "(" <expr> ")"
+
+/* LITERAIS */
+<number> ::= ("0" | [1-9] [0-9]*) ("." [0-9]+)?
+<string> ::= "\"" <char_chain> "\""
+<char_literal> ::= "'" <char> "'"
+<char_chain> ::= <char> <char_chain> | ε
+<char> ::= [0-9] | [A-Z] | [a-z] | "." | "-" | "_" | "," | "!" | "?" | ":" | " " | "\n"
+<id> ::= [a-zA-Z_] ([0-9] | [a-z] | [A-Z] | "_")*
+<list_literal> ::= "[" (<expr> ("," <expr>)*)? "]"
+<dict_literal> ::= "{" <key_value_pair> ("," <key_value_pair>)* "}"
+<set_literal> ::= "{" <expr> ("," <expr>)* "}"
+<tuple_literal> ::= "(" <expr> "," <expr> ("," <expr>)* ")"
+<key_value_pair> ::= <expr> ":" <expr>
+
+/* TIPOS */
+<type> ::= "i8" | "i16" | "i32" | "i64"
+         | "u8" | "u16" | "u32" | "u64"
+         | "f16" | "f32" | "f64"
+         | "char" | "string" | "bool" | "any" | "void"
+         | "[" <type> "]"
+         | "<" <type> "," <type> ">"
+         | "{" <type> "}"
+         | "chan"
+         | "enum"
+         | <func_type>
+         | <tuple_type>
+         | <id>
+<func_type> ::= "(" (<type> ("," <type>)*)? ")" "->" <type>
+<tuple_type> ::= "(" <type> "," <type> ("," <type>)* ")"
+
+/* COMENTARIOS */
+<inline_comment> ::= "#" <char_chain>
+<block_comment> ::= "/*" <char_chain> "*/"

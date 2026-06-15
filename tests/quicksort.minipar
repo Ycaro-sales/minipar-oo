@@ -1,0 +1,42 @@
+# Quicksort in-place com arrays estaticos.
+# Requer: arr[i] = x (TAC/cgen pendentes nas proximas fases).
+# Parse e analise semantica ja funcionam completamente.
+
+func swap(arr: [i32], i: i32, j: i32) {
+    let tmp: i32 = arr[i]
+    arr[i] = arr[j]
+    arr[j] = tmp
+}
+
+func partition(arr: [i32], low: i32, high: i32) -> i32 {
+    let pivot: i32 = arr[high]
+    let i: i32 = low - 1
+    let j: i32 = low
+    while (j < high) {
+        if (arr[j] <= pivot) {
+            i = i + 1
+            swap(arr, i, j)
+        }
+        j = j + 1
+    }
+    swap(arr, i + 1, high)
+    return i + 1
+}
+
+func quicksort(arr: [i32], low: i32, high: i32) {
+    if (low < high) {
+        let p: i32 = partition(arr, low, high)
+        quicksort(arr, low, p - 1)
+        quicksort(arr, p + 1, high)
+    }
+}
+
+func main() {
+    let arr: [i32] = [5, 2, 9, 1, 7, 3]
+    quicksort(arr, 0, 5)
+    let i: i32 = 0
+    while (i < 6) {
+        print(arr[i])
+        i = i + 1
+    }
+}

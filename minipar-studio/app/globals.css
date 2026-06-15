@@ -1,0 +1,94 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-panel: var(--panel);
+  --color-editor: var(--editor);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, monospace;
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.16 0.02 260);
+  --foreground: oklch(0.96 0.01 250);
+  --panel: oklch(0.20 0.025 260);
+  --panel-foreground: oklch(0.96 0.01 250);
+  --editor: oklch(0.13 0.02 260);
+  --card: oklch(0.21 0.025 260);
+  --card-foreground: oklch(0.96 0.01 250);
+  --primary: oklch(0.72 0.18 290);
+  --primary-foreground: oklch(0.14 0.02 260);
+  --secondary: oklch(0.26 0.03 260);
+  --secondary-foreground: oklch(0.96 0.01 250);
+  --muted: oklch(0.24 0.025 260);
+  --muted-foreground: oklch(0.68 0.03 260);
+  --accent: oklch(0.72 0.16 200);
+  --accent-foreground: oklch(0.14 0.02 260);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 250);
+  --success: oklch(0.72 0.17 160);
+  --warning: oklch(0.80 0.17 80);
+  --border: oklch(0.30 0.03 260 / 60%);
+  --input: oklch(0.26 0.03 260);
+  --ring: oklch(0.72 0.18 290);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, oklch(0.35 0.15 290 / 25%), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, oklch(0.35 0.15 200 / 22%), transparent 60%),
+      var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Syntax highlight (Prism custom theme) */
+.token.comment { color: oklch(0.60 0.03 160); font-style: italic; }
+.token.string { color: oklch(0.80 0.15 145); }
+.token.number { color: oklch(0.80 0.17 60); }
+.token.keyword, .token.boolean { color: oklch(0.78 0.18 300); font-weight: 600; }
+.token.function { color: oklch(0.80 0.15 220); }
+.token.operator, .token.punctuation { color: oklch(0.75 0.03 260); }
+.token.builtin { color: oklch(0.78 0.16 30); }
+
+.editor-scroll textarea:focus { outline: none !important; }
+.editor-scroll textarea, .editor-scroll pre {
+  font-family: var(--font-mono) !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 10px; height: 10px; }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: oklch(0.30 0.03 260); border-radius: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }

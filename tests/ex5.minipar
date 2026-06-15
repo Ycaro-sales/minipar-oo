@@ -1,0 +1,13 @@
+func count(n: i32) -> void{
+  while(n >= 0)
+  {
+    print(n)
+    n = n - 1
+  }
+}
+
+func main()
+{
+  let num: i32 = 10
+  count(num)
+}

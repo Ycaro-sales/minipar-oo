@@ -1,134 +1,257 @@
 package lexer
 
-type TokenType string
+type TokenType int
+
+func (t TokenType) String() string {
+	if name, ok := tokenNames[t]; ok {
+		return name
+	}
+	return "UNKNOWN"
+}
+
+var tokenNames = map[TokenType]string{
+	ILLEGAL: "ILLEGAL",
+	EOF:     "EOF",
+
+	IDENT:  "IDENT",
+	NUMBER: "NUMBER",
+	STRING: "STRING",
+	CHAR:   "CHAR",
+
+	ASSIGN:       "=",
+	PLUS:         "+",
+	MINUS:        "-",
+	BANG:         "!",
+	ASTERISK:     "*",
+	SLASH:        "/",
+	MOD:          "%",
+	ARROW:        "->",
+	FAT_ARROW:    "=>",
+	PLUS_ASSIGN:  "+=",
+	MINUS_ASSIGN: "-=",
+	STAR_ASSIGN:  "*=",
+	SLASH_ASSIGN: "/=",
+
+	EQ:     "==",
+	NOT_EQ: "!=",
+	LT:     "<",
+	GT:     ">",
+	LTE:    "<=",
+	GTE:    ">=",
+
+	COMMA:     ",",
+	SEMICOLON: ";",
+	COLON:     ":",
+	DOT:       ".",
+	LPAREN:    "(",
+	RPAREN:    ")",
+	LBRACE:    "{",
+	RBRACE:    "}",
+	LBRACKET:  "[",
+	RBRACKET:  "]",
+
+	LET:        "LET",
+	CLASS:      "CLASS",
+	INTERFACE:  "INTERFACE",
+	IMPLEMENTS: "IMPLEMENTS",
+	SELF:       "SELF",
+	FUNC:       "FUNC",
+	RETURN:     "RETURN",
+	BREAK:      "BREAK",
+	CONTINUE:   "CONTINUE",
+	PASS:       "PASS",
+	GOTO:       "GOTO",
+
+	IF:     "IF",
+	ELSE:   "ELSE",
+	SWITCH: "SWITCH",
+	WHILE:  "WHILE",
+	DO:     "DO",
+	FOR:    "FOR",
+	IN:     "IN",
+
+	SEQ:       "SEQ",
+	PAR:       "PAR",
+	S_CHANNEL: "S_CHANNEL",
+	C_CHANNEL: "C_CHANNEL",
+
+	PRINT: "PRINT",
+	INPUT: "INPUT",
+
+	AND:   "AND",
+	OR:    "OR",
+	TRUE:  "TRUE",
+	FALSE: "FALSE",
+
+	TYPE_I8:     "i8",
+	TYPE_I16:    "i16",
+	TYPE_I32:    "i32",
+	TYPE_I64:    "i64",
+	TYPE_U8:     "u8",
+	TYPE_U16:    "u16",
+	TYPE_U32:    "u32",
+	TYPE_U64:    "u64",
+	TYPE_F16:    "f16",
+	TYPE_F32:    "f32",
+	TYPE_F64:    "f64",
+	TYPE_CHAR:   "char",
+	TYPE_STRING: "string",
+	TYPE_BOOL:   "bool",
+	TYPE_ANY:    "any",
+	TYPE_VOID:   "void",
+	TYPE_CHAN:   "chan",
+}
+
+const (
+	ILLEGAL TokenType = iota
+	EOF
+
+	IDENT
+	NUMBER
+	STRING
+	CHAR
+
+	ASSIGN
+	PLUS
+	MINUS
+	BANG
+	ASTERISK
+	SLASH
+	MOD
+	ARROW
+	FAT_ARROW
+	PLUS_ASSIGN
+	MINUS_ASSIGN
+	STAR_ASSIGN
+	SLASH_ASSIGN
+
+	EQ
+	NOT_EQ
+	LT
+	GT
+	LTE
+	GTE
+
+	COMMA
+	SEMICOLON
+	COLON
+	DOT
+	LPAREN
+	RPAREN
+	LBRACE
+	RBRACE
+	LBRACKET
+	RBRACKET
+
+	LET
+	CLASS
+	INTERFACE
+	IMPLEMENTS
+	SELF
+	FUNC
+	RETURN
+	BREAK
+	CONTINUE
+	PASS
+	GOTO
+
+	IF
+	ELSE
+	SWITCH
+	WHILE
+	DO
+	FOR
+	IN
+
+	SEQ
+	PAR
+	S_CHANNEL
+	C_CHANNEL
+
+	PRINT
+	INPUT
+
+	AND
+	OR
+	TRUE
+	FALSE
+
+	TYPE_I8
+	TYPE_I16
+	TYPE_I32
+	TYPE_I64
+	TYPE_U8
+	TYPE_U16
+	TYPE_U32
+	TYPE_U64
+	TYPE_F16
+	TYPE_F32
+	TYPE_F64
+	TYPE_CHAR
+	TYPE_STRING
+	TYPE_BOOL
+	TYPE_ANY
+	TYPE_VOID
+	TYPE_CHAN
+)
 
 type Token struct {
 	Type    TokenType
 	Literal string
+	Line    int
 }
 
-const (
-	// Especiais
-	ILLEGAL = "ILLEGAL" // Para caracteres que não pertencem à linguagem
-	EOF     = "EOF"     // Fim do arquivo (End Of File)
-
-	// Literais e identificadores
-	IDENT  = "IDENT"  // Nomes criados pelo usuário
-	NUMBER = "NUMBER" // Números inteiros ou decimais
-	STRING = "STRING" // Texto entre aspas duplas
-
-	// Operadores matemáticos e lógicos
-	ASSIGN   = "="
-	PLUS     = "+"
-	MINUS    = "-"
-	BANG     = "!"
-	ASTERISK = "*"
-	SLASH    = "/"
-	MOD      = "%"
-
-	// Operadores de comparação
-	EQ     = "=="
-	NOT_EQ = "!="
-	LT     = "<"
-	GT     = ">"
-	LTE    = "<="
-	GTE    = ">="
-
-	// Pontuação e delimitadores
-	COMMA     = ","
-	SEMICOLON = ";"
-	COLON     = ":"
-	DOT       = "."
-	LPAREN    = "("
-	RPAREN    = ")"
-	LBRACE    = "{"
-	RBRACE    = "}"
-	LBRACKET  = "["
-	RBRACKET  = "]"
-
-	// Orientação a Objetos
-	CLASS   = "CLASS"
-	EXTENDS = "EXTENDS"
-	NEW     = "NEW"
-
-	// Funções e retornos
-	FUNC     = "FUNC"
-	RETURN   = "RETURN"
-	BREAK    = "BREAK"
-	CONTINUE = "CONTINUE"
-	PASS     = "PASS"
-
-	// Controle de fluxo
-	IF    = "IF"
-	WHILE = "WHILE"
-	DO    = "DO"
-	FOR   = "FOR"
-	IN    = "IN"
-
-	// Concorrência e blocos
-	SEQ = "SEQ"
-	PAR = "PAR"
-
-	// Input/Output e comunicação
-	PRINT     = "PRINT"
-	INPUT     = "INPUT"
-	S_CHANNEL = "S_CHANNEL"
-	C_CHANNEL = "C_CHANNEL"
-	SEND      = "SEND"
-	RECEIVE   = "RECEIVE"
-
-	// Lógica e booleanos
-	AND   = "AND"
-	OR    = "OR"
-	TRUE  = "TRUE"
-	FALSE = "FALSE"
-
-	// Tipos de dados
-	TYPE_NUMBER = "TYPE_NUMBER"
-	TYPE_STRING = "TYPE_STRING"
-	TYPE_BOOL   = "TYPE_BOOL"
-	TYPE_VOID   = "TYPE_VOID"
-	TYPE_LIST   = "TYPE_LIST"
-	TYPE_DICT   = "TYPE_DICT"
-)
-
 var keywords = map[string]TokenType{
-	"class":     CLASS,
-	"extends":   EXTENDS,
-	"new":       NEW,
-	"func":      FUNC,
-	"return":    RETURN,
-	"break":     BREAK,
-	"continue":  CONTINUE,
-	"pass":      PASS,
-	"if":        IF,
-	"while":     WHILE,
-	"do":        DO,
-	"for":       FOR,
-	"in":        IN,
-	"seq":       SEQ,
-	"par":       PAR,
-	"print":     PRINT,
-	"input":     INPUT,
-	"s_channel": S_CHANNEL,
-	"c_channel": C_CHANNEL,
-	"send":      SEND,
-	"receive":   RECEIVE,
-	"and":       AND,
-	"or":        OR,
-	"true":      TRUE,
-	"false":     FALSE,
-	"number":    TYPE_NUMBER,
-	"string":    TYPE_STRING,
-	"bool":      TYPE_BOOL,
-	"void":      TYPE_VOID,
-	"list":      TYPE_LIST,
-	"dict":      TYPE_DICT,
+	"let":        LET,
+	"class":      CLASS,
+	"interface":  INTERFACE,
+	"implements": IMPLEMENTS,
+	"Self":       SELF,
+	"func":       FUNC,
+	"return":     RETURN,
+	"break":      BREAK,
+	"continue":   CONTINUE,
+	"pass":       PASS,
+	"goto":       GOTO,
+	"if":         IF,
+	"else":       ELSE,
+	"switch":     SWITCH,
+	"while":      WHILE,
+	"do":         DO,
+	"for":        FOR,
+	"in":         IN,
+	"seq":        SEQ,
+	"par":        PAR,
+	"s_channel":  S_CHANNEL,
+	"c_channel":  C_CHANNEL,
+	"print":      PRINT,
+	"input":      INPUT,
+	"and":        AND,
+	"or":         OR,
+	"true":       TRUE,
+	"false":      FALSE,
+	"i8":         TYPE_I8,
+	"i16":        TYPE_I16,
+	"i32":        TYPE_I32,
+	"i64":        TYPE_I64,
+	"u8":         TYPE_U8,
+	"u16":        TYPE_U16,
+	"u32":        TYPE_U32,
+	"u64":        TYPE_U64,
+	"f16":        TYPE_F16,
+	"f32":        TYPE_F32,
+	"f64":        TYPE_F64,
+	"char":       TYPE_CHAR,
+	"string":     TYPE_STRING,
+	"bool":       TYPE_BOOL,
+	"any":        TYPE_ANY,
+	"void":       TYPE_VOID,
+	"chan":        TYPE_CHAN,
 }
 
 func LookupIdent(ident string) TokenType {
-	if token, ok := keywords[ident]; ok {
-		return token
+	if tok, ok := keywords[ident]; ok {
+		return tok
 	}
 	return IDENT
 }
