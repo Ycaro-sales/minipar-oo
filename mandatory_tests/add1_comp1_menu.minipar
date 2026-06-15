@@ -56,6 +56,9 @@ func main() {
 
     # TODO: adicionar INPUT e SWITCH CASE para executar opcao conforme usuario
 
+    let resp: string = input("Escolhar uma opcao:")
+    let op: int32 = to_number(string)
+
     # --- Opcao 1: Quicksort local no Computador 1 ---
     print("--- Resultado 1: Quicksort (local) ---")
     let arr: [i32] = [42, 17, 5, 99, 23, 8, 61]

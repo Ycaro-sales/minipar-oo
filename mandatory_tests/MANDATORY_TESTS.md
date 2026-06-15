@@ -18,6 +18,7 @@ Lista de testes criados pelo professor para validacao do compilador minipar
 
 ![print_rodando](testesOK/teste1.png)
 
+
 # ⚠️ 2. Execucao paralela via threads
 - Calcular fatorial e fibonacci de forma paralela
 

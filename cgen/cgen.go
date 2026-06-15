@@ -319,7 +319,7 @@ func (g *CGenerator) emitBuiltinHelpers(u builtinUsage) {
 		g.buf.WriteString("    char buffer[256] = {0};\n")
 		g.buf.WriteString("    snprintf(buffer, sizeof(buffer), \"%s %f %f\", op, v1, v2);\n")
 		g.buf.WriteString("    send(sock, buffer, strlen(buffer), 0); // Envia o pacote TCP real\n")
-		
+
 		g.buf.WriteString("    memset(buffer, 0, sizeof(buffer));\n")
 		g.buf.WriteString("    int valread = recv(sock, buffer, 255, 0); // Fica travado aguardando o servidor devolver\n")
 		g.buf.WriteString("    if (valread > 0) printf(\"  [CLIENTE] Recebeu a resposta TCP: %s\\n\", buffer);\n")
@@ -337,37 +337,37 @@ func (g *CGenerator) emitBuiltinHelpers(u builtinUsage) {
 		g.buf.WriteString("    struct sockaddr_in address;\n")
 		g.buf.WriteString("    int opt = 1;\n")
 		g.buf.WriteString("    int addrlen = sizeof(address);\n")
-		
+
 		g.buf.WriteString("    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) exit(EXIT_FAILURE);\n")
 		g.buf.WriteString("    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // Permite reiniciar rapido\n")
 		g.buf.WriteString("    address.sin_family = AF_INET;\n")
 		g.buf.WriteString("    address.sin_addr.s_addr = INADDR_ANY;\n")
 		g.buf.WriteString("    address.sin_port = htons(port);\n")
-		
+
 		g.buf.WriteString("    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) { perror(\"bind\"); exit(EXIT_FAILURE); }\n")
 		g.buf.WriteString("    if (listen(server_fd, 3) < 0) { perror(\"listen\"); exit(EXIT_FAILURE); }\n")
-		
+
 		g.buf.WriteString("    printf(\"Server [%s] started on %s:%d\\n\", desc, ip, port);\n")
 		g.buf.WriteString("    printf(\"Aguardando conexoes REAIS...\\n\");\n")
-		
+
 		g.buf.WriteString("    while(1) {\n") // Loop principal do servidor (mantém ele vivo)
 		g.buf.WriteString("        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) continue;\n")
 		g.buf.WriteString("        printf(\"\\n  [SERVIDOR] *** Nova Conexao TCP Aceita ***\\n\");\n")
-		
+
 		g.buf.WriteString("        char buffer[256];\n")
 		g.buf.WriteString("        while(1) {\n") // Loop de comunicação contínua com 1 cliente específico
 		g.buf.WriteString("            memset(buffer, 0, sizeof(buffer));\n")
 		g.buf.WriteString("            if (recv(new_socket, buffer, 255, 0) <= 0) break; // Sai se o cliente der close()\n")
-		
+
 		g.buf.WriteString("            printf(\"  [SERVIDOR] Mensagem recebida: %s\\n\", buffer);\n")
 		g.buf.WriteString("            char op[16]; double v1, v2, res = 0;\n")
-		
+
 		g.buf.WriteString("            if (sscanf(buffer, \"%s %lf %lf\", op, &v1, &v2) == 3) {\n")
 		g.buf.WriteString("                if (strcmp(op, \"+\") == 0) res = v1 + v2;\n")
 		g.buf.WriteString("                else if (strcmp(op, \"-\") == 0) res = v1 - v2;\n")
 		g.buf.WriteString("                else if (strcmp(op, \"*\") == 0) res = v1 * v2;\n")
 		g.buf.WriteString("                else if (strcmp(op, \"/\") == 0) res = v1 / v2;\n")
-		
+
 		g.buf.WriteString("                snprintf(buffer, sizeof(buffer), \"%.2f\", res);\n")
 		g.buf.WriteString("                send(new_socket, buffer, strlen(buffer), 0); // Envia resposta de volta!\n")
 		g.buf.WriteString("                printf(\"  [SERVIDOR] Resposta enviada: %s\\n\", buffer);\n")
