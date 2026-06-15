@@ -253,6 +253,7 @@ type ChannelStmt struct {
 	Line     int
 	ChanType string
 	Name     string
+	Elem     string // canonical element type carried by the channel (chan<Elem>)
 	Args     []Expression
 }
 
@@ -281,22 +282,6 @@ type IndexAssignment struct {
 
 func (ia *IndexAssignment) GetLine() int { return ia.Line }
 func (ia *IndexAssignment) stmtNode()    {}
-
-type PrintStmt struct {
-	Line int
-	Args []Expression
-}
-
-func (p *PrintStmt) GetLine() int { return p.Line }
-func (p *PrintStmt) stmtNode()    {}
-
-type InputStmt struct {
-	Line   int
-	Prompt Expression
-}
-
-func (i *InputStmt) GetLine() int { return i.Line }
-func (i *InputStmt) stmtNode()    {}
 
 type ReturnStmt struct {
 	Line  int
@@ -493,6 +478,18 @@ type TupleLiteral struct {
 
 func (t *TupleLiteral) GetLine() int { return t.Line }
 func (t *TupleLiteral) exprNode()    {}
+
+// ChanExpr is the in-memory channel constructor `chan<Elem>(Cap)`. Cap is the
+// optional buffer capacity (nil => unbuffered/synchronous channel).
+type ChanExpr struct {
+	ExprMeta
+	Line int
+	Elem string
+	Cap  Expression
+}
+
+func (c *ChanExpr) GetLine() int { return c.Line }
+func (c *ChanExpr) exprNode()    {}
 
 type DictLiteral struct {
 	ExprMeta

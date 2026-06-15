@@ -54,7 +54,7 @@
  15  i32        "i32"
  15  =          "="
  15  NUMBER     "10"
- 16  PRINT      "print"
+ 16  IDENT      "print"
  16  (          "("
  16  STRING     "Fibonacci de "
  16  ,          ","

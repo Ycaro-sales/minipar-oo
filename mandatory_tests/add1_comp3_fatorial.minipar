@@ -22,10 +22,16 @@ func calcular_fatorial(n: i32) -> i32 {
     return resultado
 }
 
-let descricao: string = "Servidor Fatorial — Computador 3 (porta 6002)"
-s_channel canal_fatorial(calcular_fatorial, descricao, "192.168.1.3", 6002)
+# Canal tipado: cada mensagem carrega o inteiro n.
+s_channel canal_fatorial<i32>("192.168.1.3", 6002)
 
 func main() {
     print("Servidor de Fatorial iniciado.")
     print("Aguardando conexao do Computador 1 na porta 6002...")
+
+    let n: i32 = canal_fatorial.recv()
+    let resultado: i32 = calcular_fatorial(n)
+    print("Fatorial calculado:", resultado)
+
+    canal_fatorial.close()
 }

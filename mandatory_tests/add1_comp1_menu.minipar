@@ -13,9 +13,9 @@
 #   2. ./mcc tests/add1_comp3_fatorial.minipar (Computador 3)
 #   3. ./mcc tests/add1_comp1_menu.minipar     (Computador 1, este)
 
-# Canais de comunicacao com os servidores remotos
-c_channel canal_matmul("192.168.1.2", 6001)
-c_channel canal_fatorial("192.168.1.3", 6002)
+# Canais de comunicacao com os servidores remotos (tipados)
+c_channel canal_matmul<(f64, f64, f64, f64, f64, f64, f64, f64)>("192.168.1.2", 6001)
+c_channel canal_fatorial<i32>("192.168.1.3", 6002)
 
 # --- Quicksort local (rodando no Computador 1) ---
 func trocar(arr: [i32], i: i32, j: i32) {
@@ -57,7 +57,7 @@ func main() {
     # TODO: adicionar INPUT e SWITCH CASE para executar opcao conforme usuario
 
     let resp: string = input("Escolhar uma opcao:")
-    let op: int32 = to_number(string)
+    let op: i32 = to_number(resp)
 
     # --- Opcao 1: Quicksort local no Computador 1 ---
     print("--- Resultado 1: Quicksort (local) ---")
@@ -75,7 +75,7 @@ func main() {
     # Envia os 8 elementos de duas matrizes 2x2 e recebe o resultado
     print("--- Resultado 2: Multiplicacao de Matrizes (Computador 2) ---")
     print("Enviando matrizes A=[1,2;3,4] e B=[5,6;7,8] ao Computador 2...")
-    canal_matmul.send(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    canal_matmul.send((1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0))
     print("")
 
     # --- Opcao 3: Fatorial no Computador 3 ---

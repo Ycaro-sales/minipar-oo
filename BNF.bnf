@@ -41,8 +41,6 @@
          | <assignment>
          | <func_call> ";"
          | <method_call> ";"
-         | <print_call>
-         | <input_call>
          | "return" <expr>? ";"
          | "break" ";"
          | "continue" ";"
@@ -56,13 +54,14 @@
 <case_clause> ::= <expr> "=>" "{" <block> "}"
 <seq_stmt> ::= "seq" "{" <block> "}"
 <par_stmt> ::= "par" "{" <block> "}"
-<print_call> ::= "print" "(" <args>? ")" ";"
-<input_call> ::= "input" "(" <string>? ")" ";"
 
 /* CANAIS */
+/* Um canal carrega exatamente um valor do tipo elemento <type> por operacao.
+   Canais de rede (s_channel/c_channel) e o canal em memoria (<chan_expr>)
+   compartilham a mesma interface tipada: send(<type>) / recv() -> <type> / close(). */
 <channel_stmt> ::= <s_channel_stmt> | <c_channel_stmt>
-<s_channel_stmt> ::= "s_channel" <id> "(" <args>? ")" ";"
-<c_channel_stmt> ::= "c_channel" <id> "(" <args>? ")" ";"
+<s_channel_stmt> ::= "s_channel" <id> "<" <type> ">" "(" <args>? ")" ";"
+<c_channel_stmt> ::= "c_channel" <id> "<" <type> ">" "(" <args>? ")" ";"
 
 /* EXPRESSOES */
 <expr> ::= <or_expr>
@@ -86,7 +85,12 @@
                  | <set_literal>
                  | <tuple_literal>
                  | <func_literal>
+                 | <chan_expr>
                  | "(" <expr> ")"
+
+/* Construtor de canal em memoria (estilo Go): o <expr> opcional e a capacidade
+   do buffer (ausente ou 0 => canal sincrono/sem buffer). */
+<chan_expr> ::= "chan" "<" <type> ">" "(" <expr>? ")"
 
 /* LITERAIS */
 <number> ::= ("0" | [1-9] [0-9]*) ("." [0-9]+)?
@@ -109,7 +113,7 @@
          | "[" <type> "]"
          | "<" <type> "," <type> ">"
          | "{" <type> "}"
-         | "chan"
+         | "chan" "<" <type> ">"
          | "enum"
          | <func_type>
          | <tuple_type>

@@ -18,6 +18,11 @@ func TestBuiltinsValid(t *testing.T) {
 		"isalpha em condicao if": `func f() { if (isalpha("a")) { let x = 1; } }`,
 		"isnum com and":          `func f() { if (isnum("1") and true) { let x = 1; } }`,
 		"len em aritmetica":      `func f() { let n: i32 = len("ab") + 1; }`,
+		"input retorna str":      `func f() { let s: string = input("p"); }`,
+		"input sem argumentos":   `func f() { let s: string = input(); }`,
+		"print sem argumentos":   `func f() { print(); }`,
+		"print um argumento":     `func f() { print("a"); }`,
+		"print variadico":        `func f() { print("a", 1, true); }`,
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -77,7 +82,7 @@ func TestBuiltinsArity(t *testing.T) {
 // escopo global como funções utilizáveis (resolvidos como chamada, não como
 // identificador livre).
 func TestBuiltinsAreFunctions(t *testing.T) {
-	for _, name := range []string{"len", "to_string", "to_number", "isalpha", "isnum"} {
+	for _, name := range []string{"len", "to_string", "to_number", "isalpha", "isnum", "print", "input"} {
 		t.Run(name, func(t *testing.T) {
 			a := New()
 			sym := a.GlobalScope().Resolve(name)

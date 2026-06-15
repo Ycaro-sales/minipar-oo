@@ -224,8 +224,6 @@ var keywords = map[string]TokenType{
 	"par":        PAR,
 	"s_channel":  S_CHANNEL,
 	"c_channel":  C_CHANNEL,
-	"print":      PRINT,
-	"input":      INPUT,
 	"and":        AND,
 	"or":         OR,
 	"true":       TRUE,

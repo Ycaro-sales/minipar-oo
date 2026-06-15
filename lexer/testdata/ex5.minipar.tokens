@@ -15,7 +15,7 @@
   2  NUMBER     "0"
   2  )          ")"
   3  {          "{"
-  4  PRINT      "print"
+  4  IDENT      "print"
   4  (          "("
   4  IDENT      "n"
   4  )          ")"

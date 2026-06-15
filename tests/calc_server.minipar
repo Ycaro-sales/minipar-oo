@@ -1,5 +1,7 @@
-# Calculator Server
-# Run this first in one terminal
+# Calculator Server (streaming model)
+# Run this first in one terminal, then start the client.
+# The server receives a stream of typed requests (op, v1, v2) over the channel,
+# computes each result, and prints it.
 
 # Define the calculator function
 func calcular(op: string, v1: f64, v2: f64) -> f64
@@ -15,12 +17,24 @@ func calcular(op: string, v1: f64, v2: f64) -> f64
   return 0
 }
 
-# Create server channel
-let desc: string = "Calculadora Servidor - Digite: operacao,num1,num2"
-s_channel calculadora_server(calcular, desc, "localhost", 5000)
+# Create server channel carrying (operation, operand1, operand2)
+s_channel calculadora_server<(string, f64, f64)>("localhost", 5000)
 
 func main()
 {
   print("Starting Calculator Server...")
   print("Server is ready and waiting for connections...")
+
+  # Receive and process the stream of requests sent by the client.
+  let i: i32 = 0
+  while (i < 4)
+  {
+    let req: (string, f64, f64) = calculadora_server.recv()
+    let res: f64 = calcular(req[0], req[1], req[2])
+    print(res)
+    i = i + 1
+  }
+
+  calculadora_server.close()
+  print("Server shutting down.")
 }

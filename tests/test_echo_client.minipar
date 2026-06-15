@@ -2,7 +2,7 @@
 # Run this SECOND in another terminal (after starting the server)
 
 # Connect to server
-c_channel echo_client("localhost", 5001)
+c_channel echo_client<string>("localhost", 5001)
 
 func main()
 {

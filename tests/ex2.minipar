@@ -4,7 +4,7 @@ func soma(num1: i32, num2: i32) -> string
 }
 
 let desc: string = "Digite dois numeros"
-s_channel calculadora_server(soma, desc, "localhost", 1234)
+s_channel calculadora_server<(i32, i32)>(soma, desc, "localhost", 1234)
 
 func main()
 {

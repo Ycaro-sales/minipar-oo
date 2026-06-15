@@ -373,6 +373,17 @@ func (p *miniparParser) parseType() string {
 			return "(" + joinStrings(parts, ", ") + ")" // best-effort
 		}
 		return "(" + joinStrings(parts, ", ") + ")"
+	case lexer.TYPE_CHAN:
+		// Channel type: "chan" "<" <type> ">". A bare "chan" (no element) is
+		// tolerated as an untyped channel for back-compatibility.
+		if !p.peekTokenIs(lexer.LT) {
+			return "chan"
+		}
+		p.nextToken() // consume "<"
+		p.nextToken() // move to the element type's first token
+		elem := p.parseType()
+		p.expectPeek(lexer.GT) // best-effort: keep the type even on a missing '>'
+		return "chan<" + elem + ">"
 	default:
 		return p.currentToken.Literal
 	}
@@ -472,10 +483,6 @@ func (p *miniparParser) parseStatement() ast.Statement {
 		return p.parseParStmt()
 	case lexer.S_CHANNEL, lexer.C_CHANNEL:
 		return p.parseChannelStmt()
-	case lexer.PRINT:
-		return p.parsePrintStmt()
-	case lexer.INPUT:
-		return p.parseInputStmt()
 	case lexer.RETURN:
 		return p.parseReturnStmt()
 	case lexer.BREAK:
@@ -661,6 +668,16 @@ func (p *miniparParser) parseChannelStmt() *ast.ChannelStmt {
 		return nil
 	}
 	name := p.currentToken.Literal
+	// Element type: "<" <type> ">" — the typed payload carried by the channel.
+	var elem string
+	if !p.expectPeek(lexer.LT) {
+		return nil
+	}
+	p.nextToken() // move to the element type's first token
+	elem = p.parseType()
+	if !p.expectPeek(lexer.GT) {
+		return nil
+	}
 	if !p.expectPeek(lexer.LPAREN) {
 		return nil
 	}
@@ -671,41 +688,7 @@ func (p *miniparParser) parseChannelStmt() *ast.ChannelStmt {
 	if p.peekTokenIs(lexer.SEMICOLON) {
 		p.nextToken()
 	}
-	return &ast.ChannelStmt{Line: line, ChanType: chanType, Name: name, Args: args}
-}
-
-func (p *miniparParser) parsePrintStmt() *ast.PrintStmt {
-	line := p.currentToken.Line
-	if !p.expectPeek(lexer.LPAREN) {
-		return nil
-	}
-	args := p.parseArgs()
-	if !p.expectPeek(lexer.RPAREN) {
-		return nil
-	}
-	if p.peekTokenIs(lexer.SEMICOLON) {
-		p.nextToken()
-	}
-	return &ast.PrintStmt{Line: line, Args: args}
-}
-
-func (p *miniparParser) parseInputStmt() *ast.InputStmt {
-	line := p.currentToken.Line
-	if !p.expectPeek(lexer.LPAREN) {
-		return nil
-	}
-	var prompt ast.Expression
-	if !p.peekTokenIs(lexer.RPAREN) {
-		p.nextToken()
-		prompt = p.parseExpression()
-	}
-	if !p.expectPeek(lexer.RPAREN) {
-		return nil
-	}
-	if p.peekTokenIs(lexer.SEMICOLON) {
-		p.nextToken()
-	}
-	return &ast.InputStmt{Line: line, Prompt: prompt}
+	return &ast.ChannelStmt{Line: line, ChanType: chanType, Name: name, Elem: elem, Args: args}
 }
 
 func (p *miniparParser) parseReturnStmt() *ast.ReturnStmt {
@@ -973,6 +956,9 @@ func (p *miniparParser) parsePrimaryExpr() ast.Expression {
 	case lexer.FUNC:
 		return p.parseFuncLiteral()
 
+	case lexer.TYPE_CHAN:
+		return p.parseChanExpr()
+
 	case lexer.IDENT:
 		name := p.currentToken.Literal
 		if p.peekTokenIs(lexer.LPAREN) {
@@ -1035,6 +1021,32 @@ func (p *miniparParser) parseFuncLiteral() *ast.FuncLiteral {
 		return nil
 	}
 	return &ast.FuncLiteral{Line: line, Params: params, ReturnType: returnType, Body: p.parseBlock()}
+}
+
+// parseChanExpr parses the in-memory channel constructor `chan<Elem>(Cap?)`.
+// The current token is `chan`.
+func (p *miniparParser) parseChanExpr() ast.Expression {
+	line := p.currentToken.Line
+	if !p.expectPeek(lexer.LT) {
+		return nil
+	}
+	p.nextToken() // move to the element type's first token
+	elem := p.parseType()
+	if !p.expectPeek(lexer.GT) {
+		return nil
+	}
+	if !p.expectPeek(lexer.LPAREN) {
+		return nil
+	}
+	var capacity ast.Expression
+	if !p.peekTokenIs(lexer.RPAREN) {
+		p.nextToken()
+		capacity = p.parseExpression()
+	}
+	if !p.expectPeek(lexer.RPAREN) {
+		return nil
+	}
+	return &ast.ChanExpr{Line: line, Elem: elem, Cap: capacity}
 }
 
 func (p *miniparParser) parseListLiteral() *ast.ListLiteral {

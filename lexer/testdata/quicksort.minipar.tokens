@@ -242,7 +242,7 @@
  38  NUMBER     "6"
  38  )          ")"
  38  {          "{"
- 39  PRINT      "print"
+ 39  IDENT      "print"
  39  (          "("
  39  IDENT      "arr"
  39  [          "["

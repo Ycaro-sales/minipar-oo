@@ -264,7 +264,10 @@ func TestParseGotoStmt(t *testing.T) {
 
 func TestParsePrintStmt(t *testing.T) {
 	stmt := parseStmt(t, `print("hello");`)
-	s := stmt.(*ast.PrintStmt)
+	s := stmt.(*ast.FuncCall)
+	if s.Name != "print" {
+		t.Errorf("name: want print, got %s", s.Name)
+	}
 	if len(s.Args) != 1 {
 		t.Errorf("args: want 1, got %d", len(s.Args))
 	}

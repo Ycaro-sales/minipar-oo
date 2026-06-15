@@ -10,7 +10,7 @@ func echo(message: string) -> string
 
 # Create server channel
 let desc: string = "Echo Server - Echoes back your message"
-s_channel echo_server(echo, desc, "localhost", 5001)
+s_channel echo_server<string>(echo, desc, "localhost", 5001)
 
 func main()
 {

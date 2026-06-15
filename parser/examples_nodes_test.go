@@ -116,7 +116,10 @@ func TestNodesEx5(t *testing.T) {
 	if len(while.Block.Statements) != 2 {
 		t.Fatalf("bloco do while: esperava 2 stmts, recebeu %d", len(while.Block.Statements))
 	}
-	print := mustType[*ast.PrintStmt](t, while.Block.Statements[0])
+	print := mustType[*ast.FuncCall](t, while.Block.Statements[0])
+	if print.Name != "print" {
+		t.Errorf("print: esperava chamada a 'print', recebeu %s", print.Name)
+	}
 	if len(print.Args) != 1 {
 		t.Errorf("print: esperava 1 arg, recebeu %d", len(print.Args))
 	}
@@ -175,7 +178,7 @@ func TestNodesEx8(t *testing.T) {
 	}
 	mustType[*ast.Assignment](t, iff.Then.Statements[0])
 	mustType[*ast.ContinueStmt](t, iff.Then.Statements[1])
-	mustType[*ast.PrintStmt](t, while.Block.Statements[1])
+	mustType[*ast.FuncCall](t, while.Block.Statements[1])
 	mustType[*ast.Assignment](t, while.Block.Statements[2])
 }
 
@@ -206,7 +209,7 @@ func TestNodesEx9(t *testing.T) {
 	binExpr(t, right.Args[0], ast.OpSub)
 
 	main := funcDecl(t, prog.Declarations[1], "main", 0, "")
-	print := mustType[*ast.PrintStmt](t, main.Body.Statements[len(main.Body.Statements)-1])
+	print := mustType[*ast.FuncCall](t, main.Body.Statements[len(main.Body.Statements)-1])
 	if len(print.Args) != 4 {
 		t.Fatalf("print: esperava 4 args, recebeu %d", len(print.Args))
 	}

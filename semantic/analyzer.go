@@ -65,7 +65,16 @@ func (a *Analyzer) registerBuiltins() {
 			Type: &Type{Name: "func", Kind: KindFunc, Params: []*Type{tAny}, Return: ret},
 		})
 	}
+	// variadic predeclares a builtin that accepts any number of `any` arguments.
+	variadic := func(name string, ret *Type) {
+		a.global.Define(&symbol{
+			Name: name, Kind: symtab.Func,
+			Type: &Type{Name: "func", Kind: KindFunc, Params: []*Type{tAny}, Return: ret, Variadic: true},
+		})
+	}
 	builtin("len", primitives["int"])
+	variadic("print", tVoid)
+	variadic("input", tString)
 	builtin("to_string", tString)
 	builtin("to_number", primitives["int"])
 	builtin("isalpha", tBool)
@@ -112,7 +121,7 @@ func (a *Analyzer) collectDeclarations(prog *ast.Program) {
 			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Interface, Line: n.Line,
 				Type: &Type{Name: n.Name, Kind: KindInterface}})
 		case *ast.ChannelStmt:
-			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Var, Line: n.Line, Type: tChan})
+			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Var, Line: n.Line, Type: a.resolveType("chan<"+n.Elem+">", n.Line)})
 		}
 	}
 
@@ -192,6 +201,11 @@ func (a *Analyzer) resolveType(name string, line int) *Type {
 			elems[i] = a.resolveType(strings.TrimSpace(p), line)
 		}
 		return &Type{Name: name, Kind: KindTuple, Elems: elems}
+	}
+	// Channel type: "chan<T>".
+	if strings.HasPrefix(name, "chan<") && strings.HasSuffix(name, ">") {
+		elem := a.resolveType(name[len("chan<"):len(name)-1], line)
+		return chanOf(elem)
 	}
 	if t, ok := primitives[name]; ok {
 		return t
@@ -402,14 +416,6 @@ func (a *Analyzer) checkStmt(s ast.Statement) {
 		if a.loopDepth == 0 {
 			a.errorf(n.Line, "'continue' fora de um laço")
 		}
-	case *ast.PrintStmt:
-		for _, arg := range n.Args {
-			a.checkExpr(arg)
-		}
-	case *ast.InputStmt:
-		if n.Prompt != nil {
-			a.checkExpr(n.Prompt)
-		}
 	case *ast.ExprStmt:
 		a.checkExpr(n.Expression)
 	case *ast.FuncCall:
@@ -530,7 +536,18 @@ func (a *Analyzer) checkChannel(n *ast.ChannelStmt) {
 	for _, arg := range n.Args {
 		a.checkExpr(arg)
 	}
-	a.define(&symbol{Name: n.Name, Kind: symtab.Var, Type: tChan, Line: n.Line}) // <- Mudamos para tChan
+	a.define(&symbol{Name: n.Name, Kind: symtab.Var, Type: a.resolveType("chan<"+n.Elem+">", n.Line), Line: n.Line})
+}
+
+// checkChanExpr types the in-memory channel constructor `chan<Elem>(Cap?)`.
+// The optional capacity must be an integer.
+func (a *Analyzer) checkChanExpr(n *ast.ChanExpr) *Type {
+	if n.Cap != nil {
+		if got := a.checkExpr(n.Cap); got.Kind != KindInt && got.Kind != KindInvalid {
+			a.errorf(n.Line, "capacidade do canal deve ser inteira, recebeu '%s'", got)
+		}
+	}
+	return a.resolveType("chan<"+n.Elem+">", n.Line)
 }
 
 // ==========================================
@@ -588,6 +605,8 @@ func (a *Analyzer) inferExpr(e ast.Expression) *Type {
 		return a.checkTuple(n)
 	case *ast.FuncLiteral:
 		return a.funcType(n.Params, n.ReturnType)
+	case *ast.ChanExpr:
+		return a.checkChanExpr(n)
 	case *ast.DictLiteral:
 		return tAny
 	case nil:
@@ -689,11 +708,44 @@ func (a *Analyzer) checkMethodCall(n *ast.MethodCall) *Type {
 		return tAny
 	}
 
-	// Channels expose communication methods (send/close) whose signatures are
-	// not yet modeled; accept any call on them.
+	// Channels carry exactly one value of their element type per operation.
+	// send(v: Elem) -> void, recv() -> Elem, close() -> void.
 	if obj.Kind == KindChan {
-		a.checkArgs(n.Args)
-		return tAny
+		elem := obj.Elem
+		if elem == nil {
+			elem = tAny // untyped channel: don't constrain the payload
+		}
+		switch n.Method {
+		case "send":
+			if len(n.Args) != 1 {
+				a.errorf(n.Line, "canal '%s' espera 1 argumento em send, recebeu %d", obj, len(n.Args))
+				a.checkArgs(n.Args)
+				return tVoid
+			}
+			got := a.checkExpr(n.Args[0])
+			if !assignable(elem, got) {
+				a.errorf(n.Line, "send no canal '%s' espera valor do tipo '%s', recebeu '%s'", obj, elem, got)
+			} else {
+				a.coerceLiteral(n.Args[0], elem)
+			}
+			return tVoid
+		case "recv":
+			if len(n.Args) != 0 {
+				a.errorf(n.Line, "recv não aceita argumentos")
+				a.checkArgs(n.Args)
+			}
+			return elem
+		case "close":
+			if len(n.Args) != 0 {
+				a.errorf(n.Line, "close não aceita argumentos")
+				a.checkArgs(n.Args)
+			}
+			return tVoid
+		default:
+			a.errorf(n.Line, "canal '%s' não possui método '%s'", obj, n.Method)
+			a.checkArgs(n.Args)
+			return tInvalid
+		}
 	}
 
 	// Arrays support the builtin `append(elem)` method.
@@ -803,6 +855,33 @@ func (a *Analyzer) checkTuple(n *ast.TupleLiteral) *Type {
 	return &Type{Name: name, Kind: KindTuple, Elems: elems}
 }
 
+// coerceLiteral re-decorates a composite literal (tuple/list) with an expected
+// target type so code generation emits the target's struct layout instead of
+// the literal's inferred one — e.g. a numeric literal used where f64 is
+// expected, so `(string, f64, f64)` doesn't degrade to `(string, float, float)`.
+// No-op for non-literals or incompatible targets.
+func (a *Analyzer) coerceLiteral(e ast.Expression, target *Type) {
+	if target == nil {
+		return
+	}
+	switch n := e.(type) {
+	case *ast.TupleLiteral:
+		if target.Kind == KindTuple && len(target.Elems) == len(n.Elements) {
+			n.SetResolvedType(target.String())
+			for i, el := range n.Elements {
+				a.coerceLiteral(el, target.Elems[i])
+			}
+		}
+	case *ast.ListLiteral:
+		if target.Kind == KindArray {
+			n.SetResolvedType(target.String())
+			for _, el := range n.Elements {
+				a.coerceLiteral(el, target.Elem)
+			}
+		}
+	}
+}
+
 func (a *Analyzer) checkIndexAssignment(n *ast.IndexAssignment) {
 	obj := a.checkExpr(n.Object)
 	val := a.checkExpr(n.Value)
@@ -841,6 +920,17 @@ func (a *Analyzer) checkCallArgs(name string, sig *Type, args []ast.Expression, 
 	for i, arg := range args {
 		got[i] = a.checkExpr(arg)
 	}
+	if sig.Variadic {
+		// Variadic builtins accept any arity; each argument is checked
+		// against the single declared parameter type.
+		for i := range args {
+			if !assignable(params[0], got[i]) {
+				a.errorf(line, "argumento %d de '%s': esperado '%s', recebido '%s'",
+					i+1, name, params[0], got[i])
+			}
+		}
+		return
+	}
 	if len(args) != len(params) {
 		a.errorf(line, "'%s' espera %d argumento(s), recebeu %d", name, len(params), len(args))
 		return
@@ -849,6 +939,8 @@ func (a *Analyzer) checkCallArgs(name string, sig *Type, args []ast.Expression, 
 		if !assignable(params[i], got[i]) {
 			a.errorf(line, "argumento %d de '%s': esperado '%s', recebido '%s'",
 				i+1, name, params[i], got[i])
+		} else {
+			a.coerceLiteral(args[i], params[i])
 		}
 	}
 }

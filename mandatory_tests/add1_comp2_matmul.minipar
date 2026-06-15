@@ -22,10 +22,16 @@ func multiplicar_matrizes(a11: f64, a12: f64, a21: f64, a22: f64,
     return c11
 }
 
-let descricao: string = "Servidor Multiplicacao de Matrizes 2x2 — Computador 2 (porta 6001)"
-s_channel canal_matmul(multiplicar_matrizes, descricao, "192.168.1.2", 6001)
+# Canal tipado: cada mensagem carrega os 8 elementos (a11..a22, b11..b22).
+s_channel canal_matmul<(f64, f64, f64, f64, f64, f64, f64, f64)>("192.168.1.2", 6001)
 
 func main() {
     print("Servidor de Multiplicacao de Matrizes iniciado.")
     print("Aguardando conexao do Computador 1 na porta 6001...")
+
+    let m: (f64, f64, f64, f64, f64, f64, f64, f64) = canal_matmul.recv()
+    let c11: f64 = multiplicar_matrizes(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7])
+    print("C[1][1] enviado de volta ao Computador 1:", c11)
+
+    canal_matmul.close()
 }

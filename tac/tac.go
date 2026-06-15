@@ -237,6 +237,9 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	case *ast.TupleLiteral:
 		return gen.genTupleLiteral(n)
 
+	case *ast.ChanExpr:
+		return gen.genChanExpr(n)
+
 	// TODO implement dict literal
 
 	// TODO implement set literal
@@ -317,12 +320,6 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	case *ast.ReturnStmt:
 		return gen.genReturnStmt(n)
 
-	case *ast.PrintStmt:
-		return gen.genPrintStmt(n)
-
-	case *ast.InputStmt:
-		return gen.genInputStmt(n)
-
 	case *ast.SeqStmt:
 		return gen.genSeqStmt(n)
 
@@ -371,6 +368,24 @@ func (gen *TACGenerator) genBinaryExpr(node *ast.BinaryExpr) string {
 }
 
 func (gen *TACGenerator) genFuncCall(node *ast.FuncCall) string {
+	// The `print` and `input` builtins lower to dedicated TAC opcodes rather
+	// than the generic PARAM/CALL sequence used for ordinary functions.
+	switch node.Name {
+	case "print":
+		for _, arg := range node.Args {
+			gen.emit("PRINT", gen.Generate(arg), "", "")
+		}
+		return ""
+	case "input":
+		prompt := ""
+		if len(node.Args) > 0 {
+			prompt = gen.Generate(node.Args[0])
+		}
+		result := gen.newTypedTemp(node.ResolvedType())
+		gen.emit("INPUT", prompt, "", result)
+		return result
+	}
+
 	for _, arg := range node.Args {
 		gen.emit("PARAM", gen.Generate(arg), "", "")
 	}
@@ -389,11 +404,28 @@ func (gen *TACGenerator) genMethodCall(node *ast.MethodCall) string {
 	return result
 }
 
+// genChanExpr emits the in-memory channel constructor. Arg1 is the element
+// type, Arg2 the buffer capacity (0 when unbuffered), Result the channel temp.
+func (gen *TACGenerator) genChanExpr(node *ast.ChanExpr) string {
+	capacity := "0"
+	if node.Cap != nil {
+		capacity = gen.Generate(node.Cap)
+	}
+	result := gen.newTypedTemp(node.ResolvedType())
+	gen.emit("CHAN_NEW", node.Elem, capacity, result)
+	return result
+}
+
 func (gen *TACGenerator) genIndexExpr(node *ast.IndexExpr) string {
 	obj := gen.Generate(node.Object)
 	idx := gen.Generate(node.Index)
 	result := gen.newTypedTemp(node.ResolvedType())
-	gen.emit("ARRAY_GET", obj, idx, result)
+	// Tuples are structs with positional fields (._N); arrays index into .data[].
+	if rt := node.Object.ResolvedType(); len(rt) > 0 && rt[0] == '(' {
+		gen.emit("TUPLE_GET", obj, idx, result)
+	} else {
+		gen.emit("ARRAY_GET", obj, idx, result)
+	}
 	return result
 }
 
@@ -463,6 +495,13 @@ func (gen *TACGenerator) genVarDecl(node *ast.VarDecl) {
 			if _, isTemp := gen.tempTypes[initializer]; isTemp {
 				gen.tempTypes[initializer] = node.Type
 			}
+		}
+		// Record the variable's resolved type so later passes (cgen) can map it.
+		// Prefer the explicit annotation; otherwise inherit the initializer's type.
+		if declType := node.Type; declType != "" {
+			gen.tempTypes[node.Name] = declType
+		} else if t := gen.tempTypes[initializer]; t != "" {
+			gen.tempTypes[node.Name] = t
 		}
 		gen.emit("ASSIGN", initializer, "", node.Name)
 	} else {
@@ -619,23 +658,6 @@ func (gen *TACGenerator) genReturnStmt(node *ast.ReturnStmt) string {
 	return ""
 }
 
-func (gen *TACGenerator) genPrintStmt(node *ast.PrintStmt) string {
-	for _, arg := range node.Args {
-		gen.emit("PRINT", gen.Generate(arg), "", "")
-	}
-	return ""
-}
-
-func (gen *TACGenerator) genInputStmt(node *ast.InputStmt) string {
-	prompt := ""
-	if node.Prompt != nil {
-		prompt = gen.Generate(node.Prompt)
-	}
-	result := gen.newTemp()
-	gen.emit("INPUT", prompt, "", result)
-	return result
-}
-
 func (gen *TACGenerator) genSeqStmt(node *ast.SeqStmt) string {
 	gen.emit("BEGIN_SEQ", "", "", "")
 	gen.genBlock(node.Block)
@@ -658,7 +680,10 @@ func (gen *TACGenerator) genChannelStmt(node *ast.ChannelStmt) string {
 	for _, arg := range node.Args {
 		gen.emit("PARAM", gen.Generate(arg), "", "")
 	}
-	gen.emit("CHAN_DECL", node.ChanType, node.Name, fmt.Sprint(len(node.Args)))
+	// Result carries the element type so cgen can pick the right serializer.
+	gen.emit("CHAN_DECL", node.ChanType, node.Name, node.Elem)
+	// Record the channel handle's type so cgen maps it to mp_chan*.
+	gen.tempTypes[node.Name] = "chan<" + node.Elem + ">"
 	return ""
 }
 

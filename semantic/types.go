@@ -31,6 +31,10 @@ type Type struct {
 	Elems  []*Type // per-position element types, for KindTuple
 	Params []*Type // parameter types, for KindFunc
 	Return *Type   // return type, for KindFunc
+
+	// Variadic marks a KindFunc that accepts any number of arguments, each
+	// checked against Params[0]. Used by builtins like `print`/`input`.
+	Variadic bool
 }
 
 // Predeclared, shared instances.
@@ -41,8 +45,13 @@ var (
 	tBool    = &Type{Name: "bool", Kind: KindBool}
 	tChar    = &Type{Name: "char", Kind: KindChar}
 	tString  = &Type{Name: "string", Kind: KindString}
-	tChan    = &Type{Name: "chan", Kind: KindChan}
+	tChan    = &Type{Name: "chan", Kind: KindChan} // untyped channel (element = any)
 )
+
+// chanOf builds the resolved type of a channel carrying elem.
+func chanOf(elem *Type) *Type {
+	return &Type{Name: "chan<" + elem.String() + ">", Kind: KindChan, Elem: elem}
+}
 
 // primitives maps every spellable primitive (including aliases) to its Type.
 var primitives = map[string]*Type{
@@ -94,6 +103,14 @@ func assignable(dst, src *Type) bool {
 			}
 		}
 		return true
+	case KindChan:
+		// Channels are invariant in their element type: chan<A> is assignable to
+		// chan<B> only when A == B. An untyped channel (Elem nil) matches any
+		// channel so bare `chan` annotations stay usable.
+		if src.Kind != KindChan {
+			return false
+		}
+		return dst.Elem == nil || src.Elem == nil || dst.Name == src.Name
 	case KindInterface:
 		// A class assigned to an interface must implement it; that structural
 		// check happens in the analyzer (it owns the class table). Same-named
@@ -124,6 +141,11 @@ func (t *Type) String() string {
 			ps[i] = p.String()
 		}
 		return "func(" + strings.Join(ps, ", ") + ") -> " + t.Return.String()
+	case KindChan:
+		if t.Elem == nil {
+			return "chan"
+		}
+		return "chan<" + t.Elem.String() + ">"
 	default:
 		return t.Name
 	}

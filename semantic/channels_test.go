@@ -7,18 +7,19 @@ import (
 )
 
 // Estes testes especificam o contrato dos tipos de canal: declarações
-// s_channel/c_channel (e o tipo `chan` em anotações) resolvem para um tipo de
-// canal, e qualquer método chamado sobre um canal (send/close/recv/...) é aceito
-// e produz um valor `any` utilizável.
+// s_channel/c_channel carregam um tipo elemento (chan<T>) e expõem a interface
+// tipada send(T) / recv() -> T / close(). send/recv são verificados contra T.
 
 // TestChannelTypesValid exercita usos válidos de canais; devem analisar sem erros.
 func TestChannelTypesValid(t *testing.T) {
 	cases := map[string]string{
-		"s_channel no topo": `s_channel srv("localhost", 1234)
+		"s_channel tipado": `s_channel srv<string>("localhost", 1234)
 			func main() { srv.send("oi"); srv.close(); }`,
-		"c_channel no topo": `c_channel cli("localhost", 1234)
-			func main() { cli.send("x", 1, 2); cli.close(); }`,
-		"parametro tipado chan": `func f(c: chan) { c.send("x"); c.close(); }`,
+		"c_channel tipado": `c_channel cli<i32>("localhost", 1234)
+			func main() { cli.send(7); cli.close(); }`,
+		"recv retorna o tipo elemento": `c_channel cli<i32>("localhost", 1234)
+			func main() { let n: i32 = cli.recv(); print(n); }`,
+		"parametro tipado chan": `func f(c: chan<string>) { c.send("x"); c.close(); }`,
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -29,10 +30,31 @@ func TestChannelTypesValid(t *testing.T) {
 	}
 }
 
+// TestChannelTypeErrors cobre violações do contrato tipado.
+func TestChannelTypeErrors(t *testing.T) {
+	cases := map[string]string{
+		"send com tipo incompatível": `c_channel cli<i32>("localhost", 1234)
+			func main() { cli.send("texto"); }`,
+		"send com aridade errada": `c_channel cli<i32>("localhost", 1234)
+			func main() { cli.send(1, 2); }`,
+		"recv não aceita argumentos": `c_channel cli<i32>("localhost", 1234)
+			func main() { let n: i32 = cli.recv(1); print(n); }`,
+		"método inexistente": `c_channel cli<i32>("localhost", 1234)
+			func main() { cli.flush(); }`,
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			if errs := analyze(t, src); len(errs) == 0 {
+				t.Errorf("esperava ao menos 1 erro, recebeu 0")
+			}
+		})
+	}
+}
+
 // TestChannelTypeResolved confirma que uma declaração de canal define, no escopo
-// global, uma variável cujo tipo resolvido é KindChan.
+// global, uma variável cujo tipo resolvido é KindChan com o tipo elemento certo.
 func TestChannelTypeResolved(t *testing.T) {
-	src := `s_channel srv("localhost", 1234) func main() { }`
+	src := `s_channel srv<string>("localhost", 1234) func main() { }`
 	prog, perrs := parser.ParseProgram(src)
 	if len(perrs) > 0 {
 		t.Fatalf("erros de parsing inesperados: %v", perrs)
@@ -48,14 +70,7 @@ func TestChannelTypeResolved(t *testing.T) {
 	if sym.Type == nil || sym.Type.Kind != KindChan {
 		t.Errorf("tipo de 'srv': esperava KindChan, recebeu %v", sym.Type)
 	}
-}
-
-// TestChannelMethodReturnsAny garante que um método de canal produz um valor
-// `any` utilizável em expressões (any + int -> any, atribuível a i32).
-func TestChannelMethodReturnsAny(t *testing.T) {
-	src := `c_channel cli("localhost", 1234)
-		func main() { let n: i32 = cli.recv() + 1; print(n); }`
-	if errs := analyze(t, src); len(errs) != 0 {
-		t.Errorf("esperava 0 erros, recebeu: %v", errs)
+	if sym.Type.Elem == nil || sym.Type.Elem.Kind != KindString {
+		t.Errorf("tipo elemento de 'srv': esperava string, recebeu %v", sym.Type.Elem)
 	}
 }

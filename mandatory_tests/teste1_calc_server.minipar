@@ -1,9 +1,10 @@
 # Teste 1 — Calculadora Aritmetica: Servidor (Computador 2)
 # Traduzido do Programa de Teste 1 do professor.
-# O servidor recebe uma operacao e dois operandos via canal e retorna o resultado.
+# O servidor recebe um fluxo de requisicoes (operacao, operando1, operando2)
+# pelo canal tipado, calcula cada resultado e o imprime.
 # Execucao:
-#   1. Iniciar este servidor: ./mcc tests/teste1_calc_server.minipar
-#   2. Iniciar o cliente em outro terminal: ./mcc tests/teste1_calc_client.minipar
+#   1. Iniciar este servidor: ./mcc mandatory_tests/teste1_calc_server.minipar
+#   2. Iniciar o cliente em outro terminal: ./mcc mandatory_tests/teste1_calc_client.minipar
 
 func calcular(op: string, v1: f64, v2: f64) -> f64 {
     switch (op) {
@@ -15,12 +16,23 @@ func calcular(op: string, v1: f64, v2: f64) -> f64 {
     return 0
 }
 
-# Declaracao do canal de comunicacao da calculadora associada ao computador servidor.
-# Computador 2 (servidor) escuta na porta 5001.
-let descricao: string = "Calculadora Servidor — Operacoes: +, -, *, /"
-s_channel calculadora(calcular, descricao, "localhost", 5001)
+# Canal do servidor (computador 2) escutando na porta 5001.
+# Cada mensagem carrega (operacao, operando1, operando2).
+s_channel calculadora<(string, f64, f64)>("localhost", 5001)
 
 func main() {
     print("Servidor Calculadora iniciado.")
     print("Aguardando conexao do cliente na porta 5001...")
+
+    # Recebe e processa o fluxo de requisicoes enviado pelo cliente.
+    let i: i32 = 0
+    while (i < 4) {
+        let req: (string, f64, f64) = calculadora.recv()
+        let res: f64 = calcular(req[0], req[1], req[2])
+        print(res)
+        i = i + 1
+    }
+
+    calculadora.close()
+    print("Servidor encerrado.")
 }
