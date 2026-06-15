@@ -299,33 +299,83 @@ func (g *CGenerator) emitBuiltinHelpers(u builtinUsage) {
 		g.buf.WriteString("}\n")
 	}
 	if u.network {
+		// ==========================================
+		// CLIENTE TCP REAL (POSIX Sockets)
+		// ==========================================
 		g.buf.WriteString("static int create_client(const char* ip, int port) {\n")
-		g.buf.WriteString("    int sock = socket(AF_INET, SOCK_STREAM, 0);\n")
+		g.buf.WriteString("    int sock = 0;\n")
+		g.buf.WriteString("    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) { printf(\"Erro na criacao do socket\\n\"); return -1; }\n")
 		g.buf.WriteString("    struct sockaddr_in serv_addr;\n")
 		g.buf.WriteString("    serv_addr.sin_family = AF_INET;\n")
 		g.buf.WriteString("    serv_addr.sin_port = htons(port);\n")
 		g.buf.WriteString("    if (strcmp(ip, \"localhost\") == 0) ip = \"127.0.0.1\";\n")
 		g.buf.WriteString("    inet_pton(AF_INET, ip, &serv_addr.sin_addr);\n")
-		g.buf.WriteString("    connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));\n")
+		g.buf.WriteString("    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) { printf(\"Erro de conexao (Servidor offline?)\\n\"); return -1; }\n")
 		g.buf.WriteString("    return sock;\n")
 		g.buf.WriteString("}\n\n")
 
 		g.buf.WriteString("static void channel_send(int sock, const char* op, double v1, double v2) {\n")
-		g.buf.WriteString("    char buffer[256];\n")
-		g.buf.WriteString("    snprintf(buffer, sizeof(buffer), \"%s %.2f %.2f\", op, v1, v2);\n")
-		// MOCK VISUAL: Imprime o pacote interceptado em vez de mandar para o Socket fechado!
-		g.buf.WriteString("    printf(\"  [REDE] Mock TCP Payload Enviado -> { %s }\\n\", buffer);\n")
-		g.buf.WriteString("    // A chamada real do send() foi desativada para evitar SIGPIPE no mock\n")
+		g.buf.WriteString("    if (sock < 0) return;\n")
+		g.buf.WriteString("    char buffer[256] = {0};\n")
+		g.buf.WriteString("    snprintf(buffer, sizeof(buffer), \"%s %f %f\", op, v1, v2);\n")
+		g.buf.WriteString("    send(sock, buffer, strlen(buffer), 0); // Envia o pacote TCP real\n")
+		
+		g.buf.WriteString("    memset(buffer, 0, sizeof(buffer));\n")
+		g.buf.WriteString("    int valread = recv(sock, buffer, 255, 0); // Fica travado aguardando o servidor devolver\n")
+		g.buf.WriteString("    if (valread > 0) printf(\"  [CLIENTE] Recebeu a resposta TCP: %s\\n\", buffer);\n")
 		g.buf.WriteString("}\n\n")
 
 		g.buf.WriteString("static void channel_close(int sock) {\n")
-		g.buf.WriteString("    printf(\"  [REDE] Conexao TCP encerrada.\\n\");\n")
-		g.buf.WriteString("    close(sock);\n")
+		g.buf.WriteString("    if (sock >= 0) close(sock);\n")
 		g.buf.WriteString("}\n\n")
 
+		// ==========================================
+		// SERVIDOR TCP REAL (POSIX Sockets)
+		// ==========================================
 		g.buf.WriteString("static void start_server(void* callback, const char* desc, const char* ip, int port) {\n")
+		g.buf.WriteString("    int server_fd, new_socket;\n")
+		g.buf.WriteString("    struct sockaddr_in address;\n")
+		g.buf.WriteString("    int opt = 1;\n")
+		g.buf.WriteString("    int addrlen = sizeof(address);\n")
+		
+		g.buf.WriteString("    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) exit(EXIT_FAILURE);\n")
+		g.buf.WriteString("    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // Permite reiniciar rapido\n")
+		g.buf.WriteString("    address.sin_family = AF_INET;\n")
+		g.buf.WriteString("    address.sin_addr.s_addr = INADDR_ANY;\n")
+		g.buf.WriteString("    address.sin_port = htons(port);\n")
+		
+		g.buf.WriteString("    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) { perror(\"bind\"); exit(EXIT_FAILURE); }\n")
+		g.buf.WriteString("    if (listen(server_fd, 3) < 0) { perror(\"listen\"); exit(EXIT_FAILURE); }\n")
+		
 		g.buf.WriteString("    printf(\"Server [%s] started on %s:%d\\n\", desc, ip, port);\n")
-		g.buf.WriteString("    printf(\"Aguardando conexoes na porta %d...\\n\", port);\n")
+		g.buf.WriteString("    printf(\"Aguardando conexoes REAIS...\\n\");\n")
+		
+		g.buf.WriteString("    while(1) {\n") // Loop principal do servidor (mantém ele vivo)
+		g.buf.WriteString("        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) continue;\n")
+		g.buf.WriteString("        printf(\"\\n  [SERVIDOR] *** Nova Conexao TCP Aceita ***\\n\");\n")
+		
+		g.buf.WriteString("        char buffer[256];\n")
+		g.buf.WriteString("        while(1) {\n") // Loop de comunicação contínua com 1 cliente específico
+		g.buf.WriteString("            memset(buffer, 0, sizeof(buffer));\n")
+		g.buf.WriteString("            if (recv(new_socket, buffer, 255, 0) <= 0) break; // Sai se o cliente der close()\n")
+		
+		g.buf.WriteString("            printf(\"  [SERVIDOR] Mensagem recebida: %s\\n\", buffer);\n")
+		g.buf.WriteString("            char op[16]; double v1, v2, res = 0;\n")
+		
+		g.buf.WriteString("            if (sscanf(buffer, \"%s %lf %lf\", op, &v1, &v2) == 3) {\n")
+		g.buf.WriteString("                if (strcmp(op, \"+\") == 0) res = v1 + v2;\n")
+		g.buf.WriteString("                else if (strcmp(op, \"-\") == 0) res = v1 - v2;\n")
+		g.buf.WriteString("                else if (strcmp(op, \"*\") == 0) res = v1 * v2;\n")
+		g.buf.WriteString("                else if (strcmp(op, \"/\") == 0) res = v1 / v2;\n")
+		
+		g.buf.WriteString("                snprintf(buffer, sizeof(buffer), \"%.2f\", res);\n")
+		g.buf.WriteString("                send(new_socket, buffer, strlen(buffer), 0); // Envia resposta de volta!\n")
+		g.buf.WriteString("                printf(\"  [SERVIDOR] Resposta enviada: %s\\n\", buffer);\n")
+		g.buf.WriteString("            }\n")
+		g.buf.WriteString("        }\n")
+		g.buf.WriteString("        close(new_socket);\n")
+		g.buf.WriteString("        printf(\"  [SERVIDOR] *** Cliente Desconectado ***\\n\");\n")
+		g.buf.WriteString("    }\n")
 		g.buf.WriteString("}\n\n")
 	}
 }
