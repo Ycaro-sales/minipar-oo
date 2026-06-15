@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Prism from "prismjs";
 import {
@@ -17,6 +17,7 @@ import {
   Trash2,
   ChevronRight,
   AlertCircle,
+  Upload,
 } from "lucide-react";
 
 const Editor = dynamic(() => import("react-simple-code-editor"), { ssr: false });
@@ -82,7 +83,9 @@ function TabButton({
 }
 
 export default function Studio() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState(EXAMPLES["Hello World"]);
+  const [filename, setFilename] = useState("main.minipar");
   const [tab, setTab] = useState<"compile" | "execute">("compile");
   const [stages, setStages] = useState<Record<StageKey, boolean>>({
     tokens: false,
@@ -223,6 +226,37 @@ export default function Studio() {
     setTimeout(() => setCopied(false), 1200);
   }
 
+  function handleImportClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text !== "string") {
+        setIsError(true);
+        setOutput("Erro ao ler o arquivo: conteúdo inválido.");
+        return;
+      }
+
+      setCode(text);
+      setFilename(file.name);
+      setIsError(false);
+      setOutput(`✓ Arquivo "${file.name}" importado com sucesso.`);
+    };
+    reader.onerror = () => {
+      setIsError(true);
+      setOutput(`Erro ao ler o arquivo "${file.name}".`);
+    };
+    reader.readAsText(file);
+
+    e.target.value = "";
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top bar */}
@@ -274,7 +308,10 @@ export default function Studio() {
                 {Object.keys(EXAMPLES).map((name) => (
                   <li key={name}>
                     <button
-                      onClick={() => setCode(EXAMPLES[name])}
+                      onClick={() => {
+                        setCode(EXAMPLES[name]);
+                        setFilename("main.minipar");
+                      }}
                       className="group w-full flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition"
                     >
                       <span className="truncate">{name}</span>
@@ -283,9 +320,26 @@ export default function Studio() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6 pt-4 border-t border-border">
+              <div className="mt-6 pt-4 border-t border-border space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".minipar"
+                  onChange={handleFileImport}
+                  className="hidden"
+                  aria-hidden
+                />
                 <button
-                  onClick={() => setCode("")}
+                  onClick={handleImportClick}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition"
+                >
+                  <Upload className="h-3.5 w-3.5" /> Importar .minipar
+                </button>
+                <button
+                  onClick={() => {
+                    setCode("");
+                    setFilename("main.minipar");
+                  }}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Limpar editor
@@ -301,7 +355,7 @@ export default function Studio() {
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2 min-w-0">
                   <Code2 className="h-4 w-4 text-primary shrink-0" />
-                  <span className="text-sm font-medium truncate">main.minipar</span>
+                  <span className="text-sm font-medium truncate">{filename}</span>
                   <span className="text-xs text-muted-foreground hidden sm:inline">
                     · {lineCount} linha{lineCount !== 1 ? "s" : ""}
                   </span>
