@@ -97,7 +97,7 @@ func (p *miniparParser) parseDeclaration() ast.Declaration {
 	case lexer.LET:
 		return p.parseVarDecl()
 	case lexer.C_CHANNEL, lexer.S_CHANNEL:
-		return p.parseChannelAsDecl()
+		return p.parseChannelStmt()
 	default:
 		p.errors = append(p.errors, fmt.Sprintf(
 			"linha %d: declaração inválida: '%s'", p.currentToken.Line, p.currentToken.Literal,

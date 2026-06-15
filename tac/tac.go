@@ -645,7 +645,11 @@ func (gen *TACGenerator) genSeqStmt(node *ast.SeqStmt) string {
 
 func (gen *TACGenerator) genParStmt(node *ast.ParStmt) string {
 	gen.emit("BEGIN_PAR", "", "", "")
-	gen.genBlock(node.Block)
+	for _, stmt := range node.Block.Statements {
+		gen.emit("PAR_TASK_START", "", "", "")
+		gen.Generate(stmt)
+		gen.emit("PAR_TASK_END", "", "", "")
+	}
 	gen.emit("END_PAR", "", "", "")
 	return ""
 }
