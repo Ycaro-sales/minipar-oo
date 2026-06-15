@@ -222,3 +222,56 @@ func TestParseArgs_helpDoesNotRequireSrc(t *testing.T) {
 		t.Fatalf("help should not error when source is absent, got: %v", err)
 	}
 }
+
+func TestParseArgs_extraPositionalsError(t *testing.T) {
+	// More than two positionals must be rejected.
+	_, err := parseArgs([]string{"prog.minipar", "app", "unexpected"})
+	if err == nil {
+		t.Fatal("want error for extra positional arguments, got none")
+	}
+}
+
+func TestParseArgs_tripleHyphenRejected(t *testing.T) {
+	// ---tokens should not be treated as a valid flag (only - and -- are accepted).
+	_, err := parseArgs([]string{"---tokens", "prog.minipar"})
+	if err == nil {
+		t.Fatal("want error for ---tokens, got none")
+	}
+}
+
+func TestParseArgs_doublehyphenFlagAccepted(t *testing.T) {
+	// --ast is the GNU long-form and should work identically to -ast.
+	cfg, err := parseArgs([]string{"--ast", "prog.minipar"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.ast.enabled {
+		t.Error("ast.enabled: want true for --ast")
+	}
+}
+
+func TestOutputName_noExtensionGetsDotOut(t *testing.T) {
+	// A source without .minipar extension must not return itself as the output
+	// name (which would cause gcc to overwrite the source).
+	got := outputName("myprog", "")
+	if got == "myprog" {
+		t.Errorf("outputName must not return the source basename unchanged; got %q", got)
+	}
+	if got != "myprog.out" {
+		t.Errorf("want myprog.out, got %q", got)
+	}
+}
+
+func TestOutputName_miniparExtensionStripped(t *testing.T) {
+	got := outputName("prog.minipar", "")
+	if got != "prog" {
+		t.Errorf("want prog, got %q", got)
+	}
+}
+
+func TestOutputName_explicitBinNameWins(t *testing.T) {
+	got := outputName("prog.minipar", "app")
+	if got != "app" {
+		t.Errorf("want app, got %q", got)
+	}
+}

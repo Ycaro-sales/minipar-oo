@@ -52,9 +52,23 @@ binary_name defaults to the source basename without .minipar.`)
 }
 
 // parseFlag splits a single '-name' or '-name=val' / '--name=val' argument
-// into its name and optional value.
+// into its name and optional value. Only exactly one or two leading dashes are
+// accepted; anything else (---x, bare -, empty after strip) returns the
+// original arg as the name so the caller surfaces a clean "unknown flag" error.
 func parseFlag(arg string) (name, val string) {
-	s := strings.TrimLeft(arg, "-") // strip one or two leading dashes
+	var s string
+	switch {
+	case strings.HasPrefix(arg, "--"):
+		s = arg[2:]
+	case strings.HasPrefix(arg, "-"):
+		s = arg[1:]
+	default:
+		return arg, ""
+	}
+	// After stripping one prefix, a leading dash means malformed (e.g. ---x).
+	if strings.HasPrefix(s, "-") || s == "" {
+		return arg, ""
+	}
 	if idx := strings.IndexByte(s, '='); idx >= 0 {
 		return s[:idx], s[idx+1:]
 	}
@@ -99,8 +113,11 @@ func parseArgs(args []string) (config, error) {
 	if len(positionals) == 0 {
 		return config{}, errors.New("arquivo fonte obrigatório: mcc [opções] <arquivo.minipar> [binary_name]")
 	}
+	if len(positionals) > 2 {
+		return config{}, fmt.Errorf("argumentos inesperados: %v", positionals[2:])
+	}
 	cfg.src = positionals[0]
-	if len(positionals) >= 2 {
+	if len(positionals) == 2 {
 		cfg.binName = positionals[1]
 	}
 	return cfg, nil
@@ -116,13 +133,27 @@ func writeArtifact(path, content string) error {
 }
 
 // outputName returns the binary output name derived from the source path when
-// no explicit name was provided.
+// no explicit name was provided. Falls back to "<basename>.out" when the source
+// does not end in ".minipar" to avoid overwriting the source file.
 func outputName(src, binName string) string {
 	if binName != "" {
 		return binName
 	}
 	base := filepath.Base(src)
-	return strings.TrimSuffix(base, ".minipar")
+	out := strings.TrimSuffix(base, ".minipar")
+	if out == base {
+		out = base + ".out"
+	}
+	return out
+}
+
+// absPath resolves p to an absolute path for collision detection; returns p
+// unchanged when os.Getwd fails (best-effort).
+func absPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }
 
 // buildBinary compiles the C source into a native binary using gcc.
@@ -215,6 +246,10 @@ func run(cfg config) int {
 	}
 
 	outName := outputName(cfg.src, cfg.binName)
+	if absSrc, absOut := absPath(cfg.src), absPath(outName); absSrc == absOut {
+		fmt.Fprintf(os.Stderr, "erro: o nome do binário (%q) colidiria com o arquivo fonte; use um binary_name explícito\n", outName)
+		return 1
+	}
 	if err := buildBinary(cCode, outName); err != nil {
 		fmt.Fprintf(os.Stderr, "erro ao compilar com gcc: %v\n", err)
 		return 1
