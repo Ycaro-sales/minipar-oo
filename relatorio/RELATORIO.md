@@ -1,29 +1,11 @@
-<!--
-Build:  pandoc RELATORIO.md -o RELATORIO.pdf \
-          --pdf-engine=xelatex \
-          -V geometry:margin=2.5cm \
-          -V lang=pt-BR
-
-Deps:   sudo apt install pandoc texlive-xetex texlive-lang-portuguese \
-                         texlive-latex-recommended texlive-fonts-recommended
--->
-
 ---
-title: "Relatório Técnico: Desenvolvimento do Compilador para a Linguagem MiniPar v2025.1"
-author:
-  - Wyvian Gabrielly Cavalcante Valença
-  - Ycaro Bruno Souza Sales
-  - Felipe Lira da Silva
-  - Marcos Mendonça
-  - João Gabriel Seixas
-date: "2025"
 lang: pt-BR
-toc: true
 toc-depth: 3
 numbersections: true
 geometry: margin=2.5cm
 mainfont: "DejaVu Serif"
 monofont: "DejaVu Sans Mono"
+highlight-style: zenburn
 ---
 
 \begin{center}
@@ -38,11 +20,11 @@ Instituto de Computação
 
 \vspace{4cm}
 
-Wyvian Gabrielly Cavalcante Valença\\
-Ycaro Bruno Souza Sales\\
 Felipe Lira da Silva\\
+João Gabriel Seixas\\
 Marcos Mendonça\\
-João Gabriel Seixas
+Wyvian Gabrielly Cavalcante Valença\\
+Ycaro Bruno Souza Sales
 
 \vspace{3cm}
 
@@ -52,14 +34,16 @@ João Gabriel Seixas
 
 GitHub: \texttt{https://github.com/Ycaro-sales/minipar-oo}
 
-Vídeo de demonstração: Não disponível
-
 \vfill
 
 Maceió — AL\\
 2025
 
 \end{center}
+
+\newpage
+
+\tableofcontents
 
 \newpage
 
@@ -297,6 +281,7 @@ MiniPar é uma linguagem de programação de **alto nível multiparadigma** — 
 | `ARROW` | `->` | Tipo de retorno de função |
 | `FAT_ARROW` | `=>` | Separador de cláusula case |
 
+
 ### Delimitadores
 
 | Token | Lexema | Descrição |
@@ -351,230 +336,72 @@ MiniPar é uma linguagem de programação de **alto nível multiparadigma** — 
 | Sprint 7 | Funcionalidades avançadas | Arrays, tuplas, OOP, built-ins, testes de integração |
 | Sprint 8 | Minipar Studio | Interface web, APIs de compilação |
 
+
 ## Modelagem UML
 
 ### Diagrama de Casos de Uso
 
-```mermaid
-flowchart LR
-    Dev([Desenvolvedor])
+```{=latex}
+\begin{center}
+```
 
-    Dev --> UC1[Compilar para binário nativo]
-    Dev --> UC2[Emitir lista de tokens]
-    Dev --> UC3[Emitir AST como JSON]
-    Dev --> UC4[Emitir TAC]
-    Dev --> UC5[Emitir código C gerado]
-    Dev --> UC6[Usar Minipar Studio]
+![diagram](./relatorio_graficos-1.png){ height=30% }
 
-    UC1 --> GCC[[GCC]]
-    UC6 --> UC1
+```{=latex}
+\end{center}
 ```
 
 ### Arquitetura de Componentes
 
-```mermaid
-flowchart LR
-    SRC["Fonte .minipar"]
-
-    subgraph Pipeline
-        LEX["lexer/\nTokenizador"]
-        PAR["parser/\nParser Desc. Rec."]
-        AST["ast/\nNós da AST"]
-        SEM["semantic/\nAnalisador Semântico"]
-        SYM["internal/symtab/\nTabela de Símbolos"]
-        TAC["tac/\nGerador de TAC"]
-        CGEN["cgen/\nGerador de Código C"]
-    end
-
-    COMP["compiler/\nOrquestrador"]
-    MCC["mcc\nCLI"]
-    GCC["gcc"]
-    BIN["Binário nativo"]
-
-    SRC --> LEX --> PAR --> AST --> SEM --> TAC --> CGEN --> GCC --> BIN
-    SEM <--> SYM
-    CGEN --> SYM
-    MCC --> COMP
-    COMP --> LEX
-    COMP --> PAR
-    COMP --> SEM
-    COMP --> TAC
-    COMP --> CGEN
+```{=latex}
+\begin{center}
 ```
+
+![diagram](./relatorio_graficos-2.png){ height=30% }
+
+```{=latex}
+\end{center}
+```
+
 
 ### Diagramas de Classe por Componente
 
 #### Lexer e Parser
 
-```mermaid
-classDiagram
-    class Lexer {
-        -input string
-        -position int
-        -nextPosition int
-        -character byte
-        -line int
-        +New(input string) Lexer
-        +NextToken() Token
-        +Line() int
-        -readCharacter()
-        -peekCharacter() byte
-        -skipWhiteSpace()
-        -skipSingleLineComment()
-        -skipMultiLineComment()
-        -readIdentifier() string
-        -readNumber() string
-        -readString() string
-    }
+```{=latex}
+\begin{center}
+```
 
-    class Token {
-        +Type TokenType
-        +Literal string
-        +Line int
-    }
+![diagram](./relatorio_graficos-3.png){ height=30% }
 
-    class Tokenizer {
-        <<interface>>
-        +NextToken() Token
-    }
-
-    class Parser {
-        <<interface>>
-        +ParseProgram(src string) Program
-    }
-
-    class miniparParser {
-        -factory LexerFactory
-        -currentToken Token
-        -peekToken Token
-        -errors []string
-        +ParseProgram(src string) Program
-        -parseDeclaration() Declaration
-        -parseStatement() Statement
-        -parseExpression() Expression
-        -parseOrExpr() Expression
-        -parseAndExpr() Expression
-        -parseComparisonExpr() Expression
-        -parseAdditiveExpr() Expression
-        -parseMultiplicativeExpr() Expression
-        -parseUnaryExpr() Expression
-        -parsePostfixExpr() Expression
-        -parsePrimaryExpr() Expression
-    }
-
-    Lexer ..|> Tokenizer
-    miniparParser ..|> Parser
-    miniparParser --> Tokenizer
-    Lexer --> Token
+```{=latex}
+\end{center}
 ```
 
 #### Analisador Semântico e Tabela de Símbolos
 
-```mermaid
-classDiagram
-    class Analyzer {
-        -global Scope
-        -scope Scope
-        -errors []string
-        -classes map~classInfo~
-        -interfaces map~ifaceInfo~
-        -currentReturn Type
-        -loopDepth int
-        +New() Analyzer
-        +Analyze(prog Program) []string
-        +GlobalScope() Scope
-        -collectDeclarations(prog Program)
-        -checkDeclarations(prog Program)
-        -checkExpr(e Expression) Type
-        -checkStmt(s Statement)
-        -checkFunc(params, ret, body)
-        -checkClass(n ClassDecl)
-        -resolveType(name string) Type
-    }
 
-    class Type {
-        +Name string
-        +Kind TypeKind
-        +Params []Type
-        +Return Type
-        +Elem Type
-        +Elems []Type
-        +isNumeric() bool
-        +String() string
-    }
-
-    class Scope {
-        +Kind ScopeKind
-        -parent Scope
-        -children []Scope
-        -symbols map~Symbol~
-        +Push(kind ScopeKind) Scope
-        +Define(sym Symbol) Symbol
-        +Resolve(name string) Symbol
-        +ResolveLocal(name string) Symbol
-        +Symbols() []Symbol
-        +Children() []Scope
-    }
-
-    class Symbol {
-        +Name string
-        +Kind SymbolKind
-        +Type T
-        +Line int
-    }
-
-    Analyzer --> Scope
-    Analyzer --> Type
-    Scope --> Symbol
+```{=latex}
+\begin{center}
 ```
+
+![diagram](./relatorio_graficos-4.png){ height=30% }
+
+```{=latex}
+\end{center}
+```
+
 
 #### Gerador TAC e Gerador C
 
-```mermaid
-classDiagram
-    class TACGenerator {
-        -instructions []TAC
-        -tempCount int
-        -labelCount int
-        -tempTypes map~string~
-        -loopStack []LoopLabels
-        +New() TACGenerator
-        +Generate(node Node) string
-        +Instructions() string
-        +RawInstructions() []Instruction
-        +TempTypes() map~string~
-        -newTemp() string
-        -newTypedTemp(typ string) string
-        -newLabel() string
-        -emit(op arg1 arg2 result string)
-    }
+```{=latex}
+\begin{center}
+```
 
-    class Instruction {
-        +Op string
-        +Arg1 string
-        +Arg2 string
-        +Result string
-    }
+![diagram](./relatorio_graficos-5.png){ height=30% } 
 
-    class CGenerator {
-        -instrs []Instruction
-        -tempTypes map~string~
-        -varTypes map~string~
-        -globalVars map~bool~
-        -localVars map~bool~
-        -paramBuf []string
-        -currentClass string
-        -insideFunc bool
-        +New(instrs tempTypes globalScope) CGenerator
-        +Generate() string
-        -declPrefix(name string) string
-        -resolveType(name string) string
-        -emitBinary(result arg1 op arg2 string)
-        -emitUnary(result op arg string)
-    }
-
-    TACGenerator --> Instruction
-    CGenerator --> Instruction
+```{=latex}
+\end{center}
 ```
 
 ---
@@ -583,7 +410,7 @@ classDiagram
 
 O compilador MiniPar segue uma arquitetura de **pipeline em fases**, onde cada fase consome e enriquece a saída da anterior:
 
-```
+```pseudocode
 Fonte (.minipar)
   → Lexer          → fluxo de tokens
   → Parser         → AST
@@ -592,6 +419,7 @@ Fonte (.minipar)
   → C Generator    → código C
   → GCC            → binário nativo
 ```
+
 
 | Pacote | Responsabilidade | LOC (aprox.) |
 |--------|-----------------|-------------|
@@ -604,43 +432,68 @@ Fonte (.minipar)
 | `cgen/` | Gerador de código C | ~577 |
 | `compiler/` | Orquestrador do pipeline | ~94 |
 
+
 ## Analisador Léxico (`lexer/`)
 
 O analisador léxico lê o código-fonte caractere a caractere, mantendo dois ponteiros (`position` e `nextPosition`) para *lookahead* de um caractere. A cada chamada a `NextToken()`, o lexer pula espaços e comentários e despacha pelo caractere atual.
 
-```
-função NextToken():
-    se comentário_não_fechado:
-        retornar token ILLEGAL
+```pseudocode
+estrutura Lexer {
+    entrada: string
+    posicaoAtual: inteiro
+    proximaPosicao: inteiro
+    caractere: byte
+    linha: inteiro
+    comentarioNaoTerminado: booleano
+}
 
-    pularEspaços()
+função proximoToken() -> Token:
+    se comentarioNaoTerminado:
+        retornar Token(ILLEGAL, "comentário de bloco não terminado")
 
-    enquanto caractereAtual é '#' ou início de '/*':
-        se '#':  pularComentárioLinha()
-        senão:   pularComentárioBlocoMultilinha()
+    pularEspacosEmBrancoEQuebrasDeLinha()
 
-    conforme caractereAtual:
-        '='  → se próximo '=': EQ "=="
-               se próximo '>': FAT_ARROW "=>"
-               senão: ASSIGN "="
-        '!'  → se próximo '=': NOT_EQ "!=" ; senão: BANG "!"
-        '<'  → se próximo '=': LTE "<="    ; senão: LT "<"
-        '>'  → se próximo '=': GTE ">="    ; senão: GT ">"
-        '+'  → se próximo '=': PLUS_ASSIGN "+=" ; senão: PLUS "+"
-        '-'  → se próximo '>': ARROW "->"
-               se próximo '=': MINUS_ASSIGN "-="
-               senão: MINUS "-"
-        '*'  → se próximo '=': STAR_ASSIGN "*=" ; senão: STAR "*"
-        '/'  → se próximo '=': SLASH_ASSIGN "/=" ; senão: SLASH "/"
-        '%', ',', ';', ':', '.', '(', ')', '{', '}', '[', ']'
-             → token de um caractere correspondente
-        '"'  → lerString() → STRING
-        '\'' → lerChar()   → CHAR
-        0    → EOF
-        padrão:
-            se éLetra(c): lerIdentificador() → lookup() → palavra-chave ou IDENT
-            se éDígito(c): lerNúmero()       → NUMBER (inteiro ou flutuante)
-            senão: ILLEGAL
+    // Lida com comentários de linha única (#) e múltiplas linhas (/* */)
+    enquanto caractere é '#' ou (caractere é '/' e proximo é '*'):
+        se caractere é '#':
+            pularComentarioDeLinha()
+        senao:
+            pularComentarioDeBloco()
+            se comentarioNaoTerminado:
+                retornar Token(ILLEGAL, "comentário não terminado")
+
+    escolha caractere:
+        caso '=':
+            se proximo == '=': avançar(); retornar Token(EQ, "==")
+            se proximo == '>': avançar(); retornar Token(FAT_ARROW, "=>")
+            retornar Token(ASSIGN, "=")
+        
+        caso '+':
+            se proximo == '=': avançar(); retornar Token(PLUS_ASSIGN, "+=")
+            retornar Token(PLUS, "+")
+            
+        // ... repete lógica de lookahead para -, *, /, !, <, > ...
+
+        caso '"':
+            literal <- lerString()
+            se encontrouEOF: retornar Token(ILLEGAL, literal)
+            retornar Token(STRING, literal)
+
+        caso 0 (EOF):
+            retornar Token(EOF, "")
+
+        padrao:
+            se ehLetra(caractere):
+                literal <- lerIdentificador()
+                tipo <- buscarPalavraChaveOuIdentificador(literal)
+                retornar Token(tipo, literal)
+            se ehDigito(caractere):
+                literal <- lerNumero() // Lida com inteiros e ponto flutuante
+                retornar Token(NUMBER, literal)
+            
+            retornar Token(ILLEGAL, caractere)
+    
+    avançarCaractere()
 ```
 
 ## Analisador Sintático e AST (`parser/`, `ast/`)
@@ -649,11 +502,49 @@ função NextToken():
 
 A AST é composta por interfaces `Node`, `Declaration`, `Statement` e `Expression`, com implementações concretas para cada construção da linguagem. Todo nó de expressão implementa `SetResolvedType(string)` e `ResolvedType() string`, preenchidos pelo analisador semântico.
 
+```pseudocode
+interface Node {
+    obterLinha() -> inteiro
+}
+
+interface Statement estende Node {
+    marcaComando()
+}
+
+interface Expression estende Node {
+    marcaExpressao()
+    obterTipoResolvido() -> string
+    definirTipoResolvido(tipo: string)
+}
+
+// ExprMeta é embutido em todas as expressões para armazenar o tipo resolvido
+estrutura ExprMeta {
+    tipoResolvido: string
+}
+
+// Exemplo de Nó de Comando
+estrutura IfStmt implementa Statement {
+    linha: inteiro
+    condicao: Expression
+    blocoEntao: BlockStmt
+    blocoSenao: BlockStmt
+}
+
+// Exemplo de Nó de Expressão
+estrutura BinaryExpr implementa Expression {
+    meta: ExprMeta          // Receberá o tipo após a análise semântica
+    linha: inteiro
+    esquerda: Expression
+    operador: Op
+    direita: Expression
+}
+```
+
 ### Analisador Sintático
 
 O parser mantém dois tokens de lookahead (`currentToken` e `peekToken`) e usa descida recursiva com uma função por nível de precedência de expressão.
 
-```
+```pseudocode
 função analisarPrograma(fonte):
     inicializarLexer(fonte)
     avançar(); avançar()            # carrega os dois lookaheads
@@ -739,7 +630,7 @@ função analisarPrimário():
 
 O analisador semântico opera em duas passagens sobre a AST, reportando erros no formato `"linha N: <mensagem>"`. Cada nó de expressão é decorado com seu tipo resolvido como efeito colateral.
 
-```
+```pseudocode
 função analisar(programa):
     coletarDeclarações(programa)    # passagem 1: nomes e assinaturas
     verificarDeclarações(programa)  # passagem 2: corpos e tipos
@@ -814,7 +705,7 @@ função inferirTipo(e):
 
 A tabela de símbolos é uma **árvore de escopos retida** parametrizada genericamente. Cada escopo é um nó com ponteiro para o pai e lista de filhos. A árvore sobrevive à análise semântica e pode ser consultada pelas fases de geração de código.
 
-```
+```pseudocode
 estrutura Escopo[T]:
     tipo:     GlobalScope | FunctionScope | ClassScope | BlockScope
     pai:      Escopo[T] | nulo
@@ -856,7 +747,7 @@ função resolver(escopo, nome) → Símbolo[T] | nulo:
 
 O gerador de TAC visita a AST decorada e emite instruções da forma `OP arg1 arg2 -> resultado`. Temporários são nomeados sequencialmente e registrados com seus tipos.
 
-```
+```pseudocode
 função gerar(nó):
     conforme tipo do nó:
 
@@ -950,7 +841,7 @@ função novoLabel() → string:
 
 O gerador C itera sobre as instruções TAC e despacha por `Op`. Aplica a regra de *declaração na primeira ocorrência*: na primeira vez que uma variável aparece como resultado, emite o tipo C junto (`int32_t x = …`); nas vezes seguintes, apenas a atribuição (`x = …`). Tipos são resolvidos a partir de `tempTypes` (temporários) ou da árvore de escopos (variáveis nomeadas).
 
-```
+```pseudocode
 função gerar():
     emitirPreâmbulo()           # #include <stdint.h>, <stdbool.h>, <stdio.h>, etc.
     emitirHelpersSeUsados()     # to_string, mp_input — apenas quando necessários
@@ -1059,7 +950,7 @@ função resolverTipo(nome) → string:
 
 **Fonte MiniPar:**
 
-```
+```minipar
 func soma(a: i32, b: i32) -> i32 {
     return a + b
 }
@@ -1071,7 +962,7 @@ func main() {
 
 **TAC gerado:**
 
-```
+```tac
 BEGIN_FUNC soma i32
 PARAM_DECL a i32
 PARAM_DECL b i32
@@ -1112,7 +1003,7 @@ int main() {
 
 O pacote `compiler` une todas as fases com injeção de dependência: recebe um `Parser` na construção e expõe métodos `Tokenize`, `AST`, `Compile` (→ TAC) e `CompileToC` (→ código C). O `main.go` analisa os argumentos, chama os métodos solicitados e invoca `gcc` para o binário final.
 
-```
+```pseudocode
 função run(args):
     opções ← analisarArgumentos(args)
     se opções.ajuda: exibir uso; retornar
@@ -1141,7 +1032,6 @@ função run(args):
 |---|---|---|
 | Go | 1.26.4 | Linguagem de implementação de todo o compilador |
 | GCC | 13.3.0 | Compilação do código C gerado para binário nativo |
-| pandoc + XeLaTeX | — | Geração deste relatório em PDF a partir de Markdown |
 | Node.js / npm | — | Execução do Minipar Studio (interface web) |
 | goldmark | 1.7.13 | Renderização de Markdown no godoc interno do projeto |
 
@@ -1183,7 +1073,7 @@ func main()
 
 **`$ mcc -tokens tests/ex1.minipar` (primeiros tokens):**
 
-```
+```tokens
 1	LET	let
 1	IDENT	a
 1	:	:
@@ -1214,7 +1104,7 @@ func main()
 
 **`$ mcc -tac tests/ex1.minipar`:**
 
-```
+```tac
 ASSIGN 10 -> a
 ASSIGN true -> b
 BEGIN_FUNC soma i32 ->
@@ -1293,7 +1183,7 @@ O programa declara variáveis globais, define `soma` que incrementa `a` em laço
 
 **Saída (`$ mcc tests/ex1.minipar && ./ex1`):**
 
-```
+```terminal
 11
 12
 13
@@ -1377,7 +1267,7 @@ int main() {
 
 **Saída (`$ mcc tests/quicksort.minipar && ./quicksort`):**
 
-```
+```terminal
 1
 2
 3

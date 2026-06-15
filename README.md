@@ -83,13 +83,10 @@ go test ./...
 
 | Construção | Situação |
 |---|---|
-| `METHOD_CALL obj.m n` | TAC emite, cgen descarta (exceto em contexto de classe) |
-| `NEW_OBJ Classe n` | TAC emite, cgen descarta silenciosamente |
 | `par { }` | Emite comentário `/* BEGIN_PAR — pthreads: TODO */`; corpo executado sequencialmente |
 | `seq { }` | Emite comentários; funcionalmente correto (já é sequencial) |
-| Canais (`s_channel`, `c_channel`) | TAC emite `CHAN_DECL`; cgen emite apenas comentário |
 
-### 🚫 Não suportado (decisão de escopo)
+### 🚫 Não suportado (trabalhos futuros)
 
 Estas construções foram avaliadas e **não serão implementadas** na versão atual por exigirem infraestrutura de memória dinâmica que está fora do escopo do projeto.
 
@@ -99,16 +96,18 @@ Estas construções foram avaliadas e **não serão implementadas** na versão a
 | `set {1, 2, 3}` | Exige tabela hash — memória dinâmica |
 | `arr.append(elem)` | Exige array dinâmico com realloc |
 | Função literal `func(x) { }` | Parser aceita, semântico não resolve o tipo |
+| Indexação de String com char** | Alteração no C Generator - ARRAY_GET em char* deve emitir `s[1]` |
 
----
 
-## Próximos passos
-
-1. **Paralelismo real** — substituir os stubs `BEGIN_PAR`/`END_PAR` por `pthread_create`
-2. **Indexação de string como char** — `ARRAY_GET` em `char*` deve emitir `s[i]` (acesso direto) em vez de `s.data[i]` (struct de array), habilitando `isalpha(message[index])` do ex7
 
 ---
 
 ## Gramática
 
 Ver [`BNF.bnf`](BNF.bnf) para a gramática formal e [`DEFINITIONS.md`](DEFINITIONS.md) para a especificação da linguagem.
+
+---
+
+## Relatório
+
+Ver [Relatório Compilador Minpar LSMVS](relatorio/relatorio_lsmvs.pdf) para detalhamento das estruturas do projeto.

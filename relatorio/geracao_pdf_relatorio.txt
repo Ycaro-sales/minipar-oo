@@ -1,0 +1,1 @@
+pandoc RELATORIO.md -f markdown-implicit_figures -o relatorio_lsmvs.pdf --highlight-style=tango  --pdf-engine=xelatex  -V geometry:margin=2.5cm  -V lang=pt-BR

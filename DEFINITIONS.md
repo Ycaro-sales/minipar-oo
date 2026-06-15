@@ -294,14 +294,3 @@ Comentários
 
 ```
 ```
-## Erros padroes
-
-### Lexico
-
-### Sintatico
-
-### Semantico
-
-# Compilador
-
-## Diagrama de classes
