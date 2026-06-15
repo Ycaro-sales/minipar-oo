@@ -2,12 +2,29 @@ package cgen
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"minipar/internal/symtab"
 	"minipar/semantic"
 	"minipar/tac"
 )
+
+// chanInfo holds metadata about a declared channel (s_channel or c_channel).
+type chanInfo struct {
+	name     string   // Minipar channel variable name
+	chanType string   // "s_channel" or "c_channel"
+	args     []string // raw TAC PARAM values: (handler,desc,host,port) or (host,port)
+}
+
+// funcParam is one parameter of a Minipar function.
+type funcParam struct{ name, typ string }
+
+// funcSig holds the pre-scanned signature of a Minipar function.
+type funcSig struct {
+	params []funcParam
+	ret    string
+}
 
 type CGenerator struct {
 	instrs      []tac.Instruction
@@ -17,7 +34,11 @@ type CGenerator struct {
 	localVars   map[string]bool  // declaradas na função atual; resetadas por função
 	paramBuf    []string         // argumentos acumulados antes de CALL
 	currentClass string          // classe em definição, para name mangling de métodos
+	currentFunc  string          // função atual ("main", etc.)
 	insideFunc  bool             // controla indentação: global vs. dentro de função
+	channels    []chanInfo       // canais declarados (na ordem de declaração)
+	chanSet     map[string]bool  // lookup rápido: nome → é canal?
+	funcSigs    map[string]funcSig // assinaturas das funções para dispatch do servidor
 	buf         strings.Builder
 }
 
@@ -28,6 +49,8 @@ func New(instrs []tac.Instruction, tempTypes map[string]string, globalScope *sym
 		varTypes:   make(map[string]string),
 		globalVars: make(map[string]bool),
 		localVars:  make(map[string]bool),
+		chanSet:    make(map[string]bool),
+		funcSigs:   make(map[string]funcSig),
 	}
 	g.collectVarTypes(globalScope)
 	return g
@@ -237,6 +260,248 @@ func tupleElemTypes(tupType string) []string {
 	return nil
 }
 
+// stripQuotes remove as aspas de uma string literal TAC (ex.: `"localhost"` → `localhost`).
+func stripQuotes(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// hasChanInstrs verifica se há pelo menos uma instrução CHAN_DECL.
+func hasChanInstrs(instrs []tac.Instruction) bool {
+	for _, instr := range instrs {
+		if instr.Op == "CHAN_DECL" {
+			return true
+		}
+	}
+	return false
+}
+
+// preScan faz uma passada única pelas instruções para coletar:
+//   - Assinaturas de todas as funções (funcSigs) — usadas no dispatch do servidor.
+//   - Informações de todos os canais (channels/chanSet) — usadas na geração de sockets.
+func (g *CGenerator) preScan() {
+	var curFunc string
+	var sig funcSig
+
+	for i, instr := range g.instrs {
+		switch instr.Op {
+		case "BEGIN_FUNC", "BEGIN_METHOD":
+			curFunc = instr.Arg1
+			sig = funcSig{ret: instr.Arg2}
+		case "PARAM_DECL":
+			if curFunc != "" {
+				sig.params = append(sig.params, funcParam{instr.Arg1, instr.Arg2})
+			}
+		case "END_FUNC", "END_METHOD":
+			if curFunc != "" {
+				g.funcSigs[curFunc] = sig
+			}
+			curFunc = ""
+			sig = funcSig{}
+		case "CHAN_DECL":
+			nArgs, _ := strconv.Atoi(instr.Result)
+			var args []string
+			start := i - nArgs
+			if start < 0 {
+				start = 0
+			}
+			for j := start; j < i; j++ {
+				if g.instrs[j].Op == "PARAM" {
+					args = append(args, g.instrs[j].Arg1)
+				}
+			}
+			ci := chanInfo{name: instr.Arg2, chanType: instr.Arg1, args: args}
+			g.channels = append(g.channels, ci)
+			g.chanSet[instr.Arg2] = true
+		}
+	}
+}
+
+// emitChanInit emite o código C de inicialização de um canal dentro de main().
+// Para c_channel: socket + connect + recv boas-vindas.
+// Para s_channel: socket + setsockopt + bind + listen.
+func (g *CGenerator) emitChanInit(ci chanInfo) string {
+	var sb strings.Builder
+	name := ci.name
+
+	if ci.chanType == "c_channel" {
+		// args: [host_expr, port_expr]
+		host := "\"127.0.0.1\""
+		port := "5000"
+		if len(ci.args) >= 1 {
+			host = ci.args[0]
+		}
+		if len(ci.args) >= 2 {
+			port = ci.args[1]
+		}
+		hostStr := stripQuotes(host)
+
+		sb.WriteString(fmt.Sprintf("    /* Connect client channel '%s' */\n", name))
+		sb.WriteString(fmt.Sprintf("    %s_fd = socket(AF_INET, SOCK_STREAM, 0);\n", name))
+		sb.WriteString(fmt.Sprintf("    if (%s_fd < 0) { perror(\"socket\"); exit(1); }\n", name))
+		sb.WriteString("    {\n")
+		sb.WriteString(fmt.Sprintf("        struct sockaddr_in _sa_%s;\n", name))
+		sb.WriteString(fmt.Sprintf("        memset(&_sa_%s, 0, sizeof(_sa_%s));\n", name, name))
+		sb.WriteString(fmt.Sprintf("        _sa_%s.sin_family = AF_INET;\n", name))
+		sb.WriteString(fmt.Sprintf("        struct hostent* _he_%s = gethostbyname(\"%s\");\n", name, hostStr))
+		sb.WriteString(fmt.Sprintf("        if (_he_%s) memcpy(&_sa_%s.sin_addr, _he_%s->h_addr, _he_%s->h_length);\n",
+			name, name, name, name))
+		sb.WriteString(fmt.Sprintf("        _sa_%s.sin_port = htons(%s);\n", name, port))
+		sb.WriteString(fmt.Sprintf("        if (connect(%s_fd, (struct sockaddr*)&_sa_%s, sizeof(_sa_%s)) < 0) { perror(\"connect\"); exit(1); }\n",
+			name, name, name))
+		sb.WriteString("    }\n")
+		sb.WriteString("    {\n")
+		sb.WriteString(fmt.Sprintf("        char _wb_%s[4096];\n", name))
+		sb.WriteString(fmt.Sprintf("        memset(_wb_%s, 0, sizeof(_wb_%s));\n", name, name))
+		sb.WriteString(fmt.Sprintf("        recv(%s_fd, _wb_%s, sizeof(_wb_%s)-1, 0);\n", name, name, name))
+		sb.WriteString(fmt.Sprintf("        printf(\"[%s] Server says: %%s\\n\", _wb_%s);\n", name, name))
+		sb.WriteString("    }\n")
+	} else {
+		// s_channel: args: [handler, desc, host, port]
+		port := "5000"
+		if len(ci.args) >= 4 {
+			port = ci.args[3]
+		}
+
+		sb.WriteString(fmt.Sprintf("    /* Setup server channel '%s' */\n", name))
+		sb.WriteString(fmt.Sprintf("    %s_fd = socket(AF_INET, SOCK_STREAM, 0);\n", name))
+		sb.WriteString(fmt.Sprintf("    if (%s_fd < 0) { perror(\"socket\"); exit(1); }\n", name))
+		sb.WriteString("    {\n")
+		sb.WriteString(fmt.Sprintf("        int _opt_%s = 1;\n", name))
+		sb.WriteString(fmt.Sprintf("        setsockopt(%s_fd, SOL_SOCKET, SO_REUSEADDR, &_opt_%s, sizeof(_opt_%s));\n",
+			name, name, name))
+		sb.WriteString(fmt.Sprintf("        struct sockaddr_in _sa_%s;\n", name))
+		sb.WriteString(fmt.Sprintf("        memset(&_sa_%s, 0, sizeof(_sa_%s));\n", name, name))
+		sb.WriteString(fmt.Sprintf("        _sa_%s.sin_family = AF_INET;\n", name))
+		sb.WriteString(fmt.Sprintf("        _sa_%s.sin_addr.s_addr = INADDR_ANY;\n", name))
+		sb.WriteString(fmt.Sprintf("        _sa_%s.sin_port = htons(%s);\n", name, port))
+		sb.WriteString(fmt.Sprintf("        if (bind(%s_fd, (struct sockaddr*)&_sa_%s, sizeof(_sa_%s)) < 0) { perror(\"bind\"); exit(1); }\n",
+			name, name, name))
+		sb.WriteString(fmt.Sprintf("        listen(%s_fd, 5);\n", name))
+		sb.WriteString(fmt.Sprintf("        printf(\"[Server '%%s'] Listening on port %s\\n\", \"%s\");\n", port, name))
+		sb.WriteString("    }\n")
+	}
+	return sb.String()
+}
+
+// emitServerLoop emite o loop de accept/recv/dispatch para um s_channel, injetado
+// no final de main() antes do return 0.
+func (g *CGenerator) emitServerLoop(ci chanInfo) string {
+	var sb strings.Builder
+	name := ci.name
+
+	// s_channel args: [handler, desc, host, port]
+	handlerName := ""
+	descExpr := ""
+	if len(ci.args) >= 1 {
+		handlerName = ci.args[0]
+	}
+	if len(ci.args) >= 2 {
+		descExpr = ci.args[1]
+	}
+
+	sig := g.funcSigs[handlerName]
+
+	sb.WriteString(fmt.Sprintf("    /* Server accept-loop for channel '%s' (handler: %s) */\n", name, handlerName))
+	sb.WriteString("    {\n")
+	sb.WriteString("        while (1) {\n")
+	sb.WriteString(fmt.Sprintf("            struct sockaddr_in _ca_%s;\n", name))
+	sb.WriteString(fmt.Sprintf("            socklen_t _cl_%s = sizeof(_ca_%s);\n", name, name))
+	sb.WriteString(fmt.Sprintf("            int _conn_%s = accept(%s_fd, (struct sockaddr*)&_ca_%s, &_cl_%s);\n",
+		name, name, name, name))
+	sb.WriteString(fmt.Sprintf("            if (_conn_%s < 0) break;\n", name))
+
+	// Send description as welcome message
+	if descExpr != "" {
+		sb.WriteString(fmt.Sprintf("            send(_conn_%s, %s, strlen(%s), 0);\n", name, descExpr, descExpr))
+	} else {
+		sb.WriteString(fmt.Sprintf("            send(_conn_%s, \"%s\", %d, 0);\n", name, name, len(name)))
+	}
+
+	// Inner request-handling loop
+	sb.WriteString(fmt.Sprintf("            char _buf_%s[4096];\n", name))
+	sb.WriteString("            while (1) {\n")
+	sb.WriteString(fmt.Sprintf("                memset(_buf_%s, 0, sizeof(_buf_%s));\n", name, name))
+	sb.WriteString(fmt.Sprintf("                int _n_%s = (int)recv(_conn_%s, _buf_%s, sizeof(_buf_%s)-1, 0);\n",
+		name, name, name, name))
+	sb.WriteString(fmt.Sprintf("                if (_n_%s <= 0) break;\n", name))
+
+	// Parse comma-separated tokens into typed handler params
+	var callArgs []string
+	if len(sig.params) > 0 {
+		sb.WriteString("                char* _tok;\n")
+		for idx, p := range sig.params {
+			varName := fmt.Sprintf("_p%d_%s", idx, name)
+			cType := mapType(p.typ)
+			if idx == 0 {
+				sb.WriteString(fmt.Sprintf("                _tok = strtok(_buf_%s, \",\");\n", name))
+			} else {
+				sb.WriteString("                _tok = strtok(NULL, \",\");\n")
+			}
+			switch p.typ {
+			case "string":
+				sb.WriteString(fmt.Sprintf("                %s %s = _tok ? _tok : \"\";\n", cType, varName))
+			case "f64", "f32", "float", "f16":
+				sb.WriteString(fmt.Sprintf("                %s %s = _tok ? atof(_tok) : 0;\n", cType, varName))
+			case "i64":
+				sb.WriteString(fmt.Sprintf("                %s %s = _tok ? atoll(_tok) : 0;\n", cType, varName))
+			default:
+				sb.WriteString(fmt.Sprintf("                %s %s = _tok ? atoi(_tok) : 0;\n", cType, varName))
+			}
+			callArgs = append(callArgs, varName)
+		}
+	}
+
+	// Call the handler and send result back
+	callStr := fmt.Sprintf("%s(%s)", handlerName, strings.Join(callArgs, ", "))
+	retType := mapType(sig.ret)
+	retFmt := fmtForType(sig.ret)
+	if sig.ret == "" || sig.ret == "void" {
+		sb.WriteString(fmt.Sprintf("                %s;\n", callStr))
+		sb.WriteString(fmt.Sprintf("                send(_conn_%s, \"OK\", 2, 0);\n", name))
+	} else {
+		sb.WriteString(fmt.Sprintf("                %s _res_%s = %s;\n", retType, name, callStr))
+		sb.WriteString("                char _resp[256];\n")
+		sb.WriteString(fmt.Sprintf("                snprintf(_resp, sizeof(_resp), \"%s\", _res_%s);\n", retFmt, name))
+		sb.WriteString(fmt.Sprintf("                send(_conn_%s, _resp, strlen(_resp), 0);\n", name))
+	}
+
+	sb.WriteString("            }\n") // end inner while
+	sb.WriteString(fmt.Sprintf("            close(_conn_%s);\n", name))
+	sb.WriteString("        }\n") // end outer while
+	sb.WriteString("    }\n")
+	return sb.String()
+}
+
+// emitChanSend emite o código C de um channel.send(args...) — serializa os args
+// em CSV, envia via socket, recebe a resposta e imprime.
+func (g *CGenerator) emitChanSend(chanName string, args []string) string {
+	var sb strings.Builder
+	var fmts []string
+	for _, arg := range args {
+		fmts = append(fmts, g.printFmt(arg))
+	}
+	fmtStr := strings.Join(fmts, ",")
+	argsJoined := strings.Join(args, ", ")
+
+	sb.WriteString("    {\n")
+	sb.WriteString("        char _sbuf[4096];\n")
+	if len(args) == 0 {
+		sb.WriteString("        strcpy(_sbuf, \"\");\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("        snprintf(_sbuf, sizeof(_sbuf), \"%s\", %s);\n", fmtStr, argsJoined))
+	}
+	sb.WriteString(fmt.Sprintf("        send(%s_fd, _sbuf, strlen(_sbuf), 0);\n", chanName))
+	sb.WriteString("        char _rbuf[4096];\n")
+	sb.WriteString("        memset(_rbuf, 0, sizeof(_rbuf));\n")
+	sb.WriteString(fmt.Sprintf("        recv(%s_fd, _rbuf, sizeof(_rbuf)-1, 0);\n", chanName))
+	sb.WriteString(fmt.Sprintf("        printf(\"[%s] Response: %%s\\n\", _rbuf);\n", chanName))
+	sb.WriteString("    }\n")
+	return sb.String()
+}
+
 // emitCompositeTypedefs escaneia todas as instruções e tipos conhecidos, e emite
 // um typedef C para cada tipo composto único ([T] e (T0,T1,...)) encontrado.
 func (g *CGenerator) emitCompositeTypedefs() {
@@ -326,6 +591,7 @@ func (g *CGenerator) emitBuiltinHelpers(u builtinUsage) {
 }
 
 func (g *CGenerator) Generate() string {
+	g.preScan()
 	usage := g.scanBuiltins()
 
 	g.buf.WriteString("#include <stdint.h>\n")
@@ -336,7 +602,18 @@ func (g *CGenerator) Generate() string {
 	if usage.ctype {
 		g.buf.WriteString("#include <ctype.h>\n")
 	}
+	if hasChanInstrs(g.instrs) {
+		g.buf.WriteString("#include <sys/socket.h>\n")
+		g.buf.WriteString("#include <netinet/in.h>\n")
+		g.buf.WriteString("#include <arpa/inet.h>\n")
+		g.buf.WriteString("#include <netdb.h>\n")
+		g.buf.WriteString("#include <unistd.h>\n")
+	}
 	g.buf.WriteByte('\n')
+	// Emit global socket fd variables for every declared channel.
+	for _, ci := range g.channels {
+		g.buf.WriteString(fmt.Sprintf("static int %s_fd = -1;\n", ci.name))
+	}
 	g.emitCompositeTypedefs()
 	g.emitBuiltinHelpers(usage)
 	g.buf.WriteByte('\n')
@@ -361,8 +638,15 @@ func (g *CGenerator) Generate() string {
 				params = append(params, fmt.Sprintf("%s %s", mapType(p.Arg2), p.Arg1))
 				g.localVars[p.Arg1] = true // param already declared in signature
 			}
+			g.currentFunc = instr.Arg1
 			g.buf.WriteString(fmt.Sprintf("%s %s(%s) {\n", retC, instr.Arg1, strings.Join(params, ", ")))
 			g.insideFunc = true
+			// Inject channel initialization at the top of main().
+			if instr.Arg1 == "main" {
+				for _, ci := range g.channels {
+					g.buf.WriteString(g.emitChanInit(ci))
+				}
+			}
 
 		case "PARAM_DECL":
 			// Já consumido pelo look-ahead de BEGIN_FUNC; ignorar se aparecer solto.
@@ -520,10 +804,17 @@ func (g *CGenerator) Generate() string {
 
 		case "END_FUNC":
 			if instr.Arg1 == "main" {
+				// Inject accept-loops for any s_channel servers before return.
+				for _, ci := range g.channels {
+					if ci.chanType == "s_channel" {
+						g.buf.WriteString(g.emitServerLoop(ci))
+					}
+				}
 				g.buf.WriteString("    return 0;\n")
 			}
 			g.buf.WriteString("}\n")
 			g.insideFunc = false
+			g.currentFunc = ""
 
 		// OOP
 		case "BEGIN_CLASS":
@@ -569,7 +860,48 @@ func (g *CGenerator) Generate() string {
 		case "END_PAR":
 			g.buf.WriteString("    /* END_PAR */\n")
 		case "CHAN_DECL":
-			g.buf.WriteString(fmt.Sprintf("    /* channel %s (tipo: %s) — não implementado */\n", instr.Arg2, instr.Arg1))
+			// Channel was already registered in preScan and its fd global was emitted
+			// in the preâmbulo. Drain any PARAMs that preceded this instruction so
+			// they are not mistakenly used by a subsequent CALL.
+			g.paramBuf = g.paramBuf[:0]
+
+		case "METHOD_CALL":
+			// Arg1 = "<obj>.<method>", Result = arg count, paramBuf holds the args.
+			nArgs, _ := strconv.Atoi(instr.Result)
+			args := make([]string, len(g.paramBuf))
+			copy(args, g.paramBuf)
+			g.paramBuf = g.paramBuf[:0]
+			_ = nArgs
+
+			// Split "obj.method".
+			dot := strings.LastIndex(instr.Arg1, ".")
+			if dot < 0 {
+				g.buf.WriteString(fmt.Sprintf("    /* METHOD_CALL %s — formato inválido */\n", instr.Arg1))
+				break
+			}
+			obj := instr.Arg1[:dot]
+			method := instr.Arg1[dot+1:]
+
+			if g.chanSet[obj] {
+				switch method {
+				case "send":
+					g.buf.WriteString(g.emitChanSend(obj, args))
+				case "close":
+					g.buf.WriteString(fmt.Sprintf("    close(%s_fd);\n", obj))
+				default:
+					g.buf.WriteString(fmt.Sprintf("    /* channel method '%s' não implementado */\n", method))
+				}
+			} else {
+				// Regular object method — class support is separate; emit a plain call.
+				callArgs := strings.Join(args, ", ")
+				result := instr.Arg2
+				if result == "" || result == "_" {
+					g.buf.WriteString(fmt.Sprintf("    %s_%s(%s);\n", obj, method, callArgs))
+				} else {
+					prefix := g.declPrefix(result)
+					g.buf.WriteString(fmt.Sprintf("    %s%s = %s_%s(%s);\n", prefix, result, obj, method, callArgs))
+				}
+			}
 		}
 	}
 

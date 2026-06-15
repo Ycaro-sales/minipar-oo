@@ -123,6 +123,8 @@ func (a *Analyzer) collectDeclarations(prog *ast.Program) {
 		case *ast.VarDecl:
 			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Var, Line: n.Line,
 				Type: a.resolveType(n.Type, n.Line)})
+		case *ast.ChannelStmt:
+			a.defineGlobal(&symbol{Name: n.Name, Kind: symtab.Var, Line: n.Line, Type: tChan})
 		case *ast.ClassDecl:
 			a.collectClassMembers(n)
 		case *ast.InterfaceDecl:
@@ -246,6 +248,11 @@ func (a *Analyzer) checkDeclarations(prog *ast.Program) {
 			a.checkClass(n)
 		case *ast.InterfaceDecl:
 			// signatures only; nothing to check in a body
+		case *ast.ChannelStmt:
+			// symbol already registered in pass 1; just type-check the args
+			for _, arg := range n.Args {
+				a.checkExpr(arg)
+			}
 		}
 	}
 }

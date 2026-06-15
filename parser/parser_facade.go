@@ -333,12 +333,8 @@ func (p *miniparParser) parseFuncDecl() *ast.FuncDecl {
 	return &ast.FuncDecl{Line: line, Name: name, Params: params, ReturnType: returnType, Body: body}
 }
 
-func (p *miniparParser) parseChannelAsDecl() *ast.VarDecl {
-	stmt := p.parseChannelStmt()
-	if stmt == nil {
-		return nil
-	}
-	return &ast.VarDecl{Line: stmt.Line, Name: stmt.Name, Type: stmt.ChanType}
+func (p *miniparParser) parseChannelAsDecl() *ast.ChannelStmt {
+	return p.parseChannelStmt()
 }
 
 // ==========================================

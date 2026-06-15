@@ -258,6 +258,7 @@ type ChannelStmt struct {
 
 func (c *ChannelStmt) GetLine() int { return c.Line }
 func (c *ChannelStmt) stmtNode()    {}
+func (c *ChannelStmt) declNode()    {} // also satisfies Declaration (top-level channel)
 
 type Assignment struct {
 	Line  int

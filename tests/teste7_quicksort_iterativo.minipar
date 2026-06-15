@@ -1,0 +1,87 @@
+# Teste 7 — Quicksort Iterativo (nao recursivo), 5 elementos
+# Traduzido do Programa de Teste 7 do professor (Python).
+# Somente usando funcoes da linguagem Minipar.
+# Pilha simulada por array + indice sp (equivalente ao Codigo de Tres Enderecos do PDF).
+#
+# Execucao esperada:
+#   Array ordenado: 5 12 33 61 98
+
+# Troca arr[i] e arr[j]
+func trocar(arr: [i32], i: i32, j: i32) {
+    let tmp: i32 = arr[i]
+    arr[i] = arr[j]
+    arr[j] = tmp
+}
+
+# Particiona arr[start..end] usando o ultimo elemento como pivo (Lomuto).
+# Retorna o indice final do pivo.
+func partition(arr: [i32], start: i32, fim: i32) -> i32 {
+    let pivot: i32 = arr[fim]
+    let i: i32 = start - 1
+    let j: i32 = start
+    while (j < fim) {
+        if (arr[j] <= pivot) {
+            i = i + 1
+            trocar(arr, i, j)
+        }
+        j = j + 1
+    }
+    trocar(arr, i + 1, fim)
+    return i + 1
+}
+
+# Quicksort iterativo: pilha S simula as chamadas recursivas.
+# Cada par (start, end) fica em posicoes consecutivas de S.
+func quicksort_iterativo(arr: [i32], n: i32) {
+    # Pilha com capacidade para n pares (2*n entradas)
+    let S: [i32] = []
+    let k: i32 = 0
+    while (k < n * 2) {
+        S.append(0)
+        k = k + 1
+    }
+
+    # Empilha o intervalo inicial [0, n-1]
+    let sp: i32 = 0
+    S[sp] = 0
+    sp = sp + 1
+    S[sp] = n - 1
+    sp = sp + 1
+
+    while (sp > 0) {
+        # Desempilha fim e start
+        sp = sp - 1
+        let fim: i32 = S[sp]
+        sp = sp - 1
+        let start: i32 = S[sp]
+
+        if (start >= fim) {
+            continue
+        }
+
+        let p: i32 = partition(arr, start, fim)
+
+        # Empilha subarray esquerdo [start, p-1]
+        S[sp] = start
+        sp = sp + 1
+        S[sp] = p - 1
+        sp = sp + 1
+
+        # Empilha subarray direito [p+1, fim]
+        S[sp] = p + 1
+        sp = sp + 1
+        S[sp] = fim
+        sp = sp + 1
+    }
+}
+
+func main() {
+    let array: [i32] = [33, 12, 98, 5, 61]
+    quicksort_iterativo(array, 5)
+    print("Array ordenado:")
+    let i: i32 = 0
+    while (i < 5) {
+        print(array[i])
+        i = i + 1
+    }
+}

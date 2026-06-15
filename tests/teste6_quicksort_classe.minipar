@@ -1,0 +1,93 @@
+# Teste 6 — Quicksort Recursivo usando Classes e Objetos
+# Traduzido do Programa de Teste 6 do professor (Python).
+# A classe Quicksort encapsula o array e implementa o algoritmo in-place
+# (partition de Lomuto, sem slicing/concatenacao de listas).
+#
+# Execucao esperada:
+#   ==== Ordenacao com Quicksort ====
+#   Vetor original: 10 -3 -40 80 70 -100
+#   Vetor ordenado: -100 -40 -3 10 70 80
+
+class Quicksort {
+    dados: [i32]
+    tamanho: i32 = 0
+
+    # Inicializa o objeto com o array a ordenar
+    func configurar(self, arr: [i32], n: i32) {
+        dados = arr
+        tamanho = n
+    }
+
+    # Troca dados[i] e dados[j]
+    func trocar(self, i: i32, j: i32) {
+        let tmp: i32 = dados[i]
+        dados[i] = dados[j]
+        dados[j] = tmp
+    }
+
+    # Particiona o subarray [low..high] e retorna indice do pivo
+    func partition(self, low: i32, high: i32) -> i32 {
+        let pivot: i32 = dados[high]
+        let i: i32 = low - 1
+        let j: i32 = low
+        while (j < high) {
+            if (dados[j] <= pivot) {
+                i = i + 1
+                Self.trocar(i, j)
+            }
+            j = j + 1
+        }
+        Self.trocar(i + 1, high)
+        return i + 1
+    }
+
+    # Quicksort recursivo no subarray [low..high]
+    func quicksort(self, low: i32, high: i32) {
+        if (low < high) {
+            let p: i32 = Self.partition(low, high)
+            Self.quicksort(low, p - 1)
+            Self.quicksort(p + 1, high)
+        }
+    }
+
+    # Ponto de entrada publico: ordena o array completo
+    func ordenar(self) {
+        Self.quicksort(0, tamanho - 1)
+    }
+
+    # Imprime todos os elementos do array
+    func imprimir(self) {
+        let i: i32 = 0
+        while (i < tamanho) {
+            print(dados[i])
+            i = i + 1
+        }
+    }
+}
+
+# Classe de interface equivalente a InterfaceOrdenacao do Python
+class InterfaceOrdenacao {
+    func iniciar(self) {
+        print("==== Ordenacao com Quicksort ====")
+        print("Insira os elementos do vetor separados por espaco:")
+
+        # Valores pre-definidos equivalentes ao exemplo do PDF
+        # (input() em Minipar e statement sem retorno; usamos literal para demonstracao)
+        let arr: [i32] = [10, -3, -40, 80, 70, -100]
+        let qs: Quicksort = Quicksort()
+        qs.configurar(arr, 6)
+
+        print("Vetor original:")
+        qs.imprimir()
+
+        qs.ordenar()
+
+        print("Vetor ordenado:")
+        qs.imprimir()
+    }
+}
+
+func main() {
+    let interface_ord: InterfaceOrdenacao = InterfaceOrdenacao()
+    interface_ord.iniciar()
+}
