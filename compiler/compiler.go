@@ -35,6 +35,11 @@ func (c *Compiler) Tokenize(src string) string {
 			break
 		}
 		fmt.Fprintf(&b, "%d\t%s\t%s\n", tok.Line, tok.Type, tok.Literal)
+		// The lexer never transitions out of the unterminated-comment error
+		// state, so ILLEGAL would repeat forever without this guard.
+		if tok.Type == lexer.ILLEGAL {
+			break
+		}
 	}
 	return b.String()
 }

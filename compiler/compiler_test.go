@@ -3,6 +3,7 @@ package compiler
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"minipar/ast"
 	"minipar/lexer"
@@ -209,5 +210,25 @@ func TestAST_semanticError(t *testing.T) {
 	// Program must still be returned (parser succeeded).
 	if prog == nil {
 		t.Fatal("want non-nil *ast.Program")
+	}
+}
+
+// TestTokenize_unterminatedComment checks that Tokenize does not hang when the
+// source contains an unterminated block comment.
+func TestTokenize_unterminatedComment(t *testing.T) {
+	src := "let x = 1; /* unterminated"
+	p := parser.NewParser(func(s string) lexer.Tokenizer { return lexer.New(s) })
+	c := New(p)
+
+	done := make(chan string, 1)
+	go func() { done <- c.Tokenize(src) }()
+
+	select {
+	case out := <-done:
+		if !strings.Contains(out, "LET") {
+			t.Errorf("expected LET token in output, got:\n%s", out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Tokenize hung on unterminated block comment")
 	}
 }
