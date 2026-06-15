@@ -1,0 +1,80 @@
+# Teste 3 — Neuronio (Perceptron com aprendizado supervisionado)
+# Traduzido do Programa de Teste 3 do professor (Python).
+# Implementa um neuronio artificial usando Classes e Objetos da linguagem Minipar.
+# A funcao de ativacao e degrau (step): retorna 1 se soma >= 0, senao 0.
+# O treinamento usa a regra do Perceptron ate o erro ser zero.
+#
+# Nota: parse lexico e sintatico OK.
+# Para compilacao completa de ponta a ponta nenhuma funcao de C extra e necessaria.
+
+class Neuronio {
+    input_val: f64 = 1.0
+    output_desejado: i32 = 0
+    peso: f64 = 0.5
+    bias: i32 = 1
+    peso_bias: f64 = 0.5
+    taxa_aprendizado: f64 = 0.01
+    erro: i32 = 1
+    iteracao: i32 = 0
+
+    # Inicializa o neuronio com valor de entrada e saida desejada.
+    # (construtor Minipar nao aceita parametros; usamos metodo configurar)
+    # TODO: atualizar apos implementacao do construtor com parametros
+    func configurar(self, iv: f64, od: i32) {
+        input_val = iv
+        output_desejado = od
+        erro = 1
+        iteracao = 0
+        peso = 0.5
+        peso_bias = 0.5
+    }
+
+    # Funcao de ativacao degrau: 1 se soma >= 0, 0 caso contrario
+    func ativacao(self, soma: f64) -> i32 {
+        if (soma >= 0) {
+            return 1
+        }
+        return 0
+    }
+
+    # Getter: retorna o valor desejado (campo privado)
+    func get_output_desejado(self) -> i32 {
+        return output_desejado
+    }
+
+    # Ciclo de treinamento: ajusta peso e peso_bias ate erro == 0
+    func treinar(self) {
+        print("Entrada:", input_val, "| Saida desejada:", output_desejado)
+
+        while (erro != 0) {
+            iteracao = iteracao + 1
+            print("#### Iteracao:", iteracao)
+            print("Peso:", peso)
+
+            let soma: f64 = (input_val * peso) + (bias * peso_bias)
+            let saida: i32 = Self.ativacao(soma)
+            print("Saida:", saida)
+
+            erro = output_desejado - saida
+            print("Erro:", erro)
+
+            if (erro != 0) {
+                peso = peso + (taxa_aprendizado * input_val * erro)
+                print("Peso do bias:", peso_bias)
+                peso_bias = peso_bias + (taxa_aprendizado * bias * erro)
+            }
+        }
+
+        print("Parabens! O neuronio aprendeu.")
+        print("Valor desejado:", output_desejado)
+    }
+}
+
+# Exemplo de uso equivalente ao Python:
+#   neuronio = Neuronio(input_val=1, output_desejado=0)
+#   neuronio.treinar()
+func main() {
+    let neuronio: Neuronio = Neuronio()
+    neuronio.configurar(1.0, 0)
+    neuronio.treinar()
+}
