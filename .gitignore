@@ -29,6 +29,8 @@ go.work.sum
 
 # mcc build artifact
 /mcc
+.next/
+node_modules/
 
 # Editor/IDE
 # .idea/
