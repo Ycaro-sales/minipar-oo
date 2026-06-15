@@ -230,12 +230,67 @@ while(soma < limite){
 
 ## Tokens
 Operadores
+```
+
+	ASSIGN: "="
+
+# Aritmeticos
+	PLUS:         "+"
+	MINUS:        "-"
+	ASTERISK:     "*"
+	SLASH:        "/"
+	MOD:          "%"
+	ARROW:        "->"
+	FAT_ARROW:    "=>"
+	PLUS_ASSIGN:  "+="
+	MINUS_ASSIGN: "-="
+	STAR_ASSIGN:  "*="
+	SLASH_ASSIGN: "/="
+
+# Comparativos
+	BANG:   "!"
+	EQ:     "=="
+	NOT_EQ: "!="
+	LT:     "<"
+	GT:     ">"
+	LTE:    "<="
+	GTE:    ">="
+
+# Booleanos
+	AND: "AND"
+	OR:  "OR"
+```
 
 Literais
+```
+IDENT:  "IDENT"
+NUMBER: "NUMBER"
+STRING: "STRING"
+CHAR:   "CHAR"
+```
 
 Delimitadores
+```
+COMMA:     ","
+SEMICOLON: ";"
+COLON:     ":"
+DOT:       "."
+LPAREN:    "("
+RPAREN:    ")"
+LBRACE:    "{"
+RBRACE:    "}"
+LBRACKET:  "["
+RBRACKET:  "]"
+```
 
 Comentários
+```
+/* comentarios 
+ * multilinha
+ */
+
+# comentarios de linha
+```
 
 ```
 ```
