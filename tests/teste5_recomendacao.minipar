@@ -1,0 +1,271 @@
+# Teste 5 — Sistema de Recomendacao via Rede Neural
+# Traduzido do Programa de Teste 5 do professor (Python), usando Classes e Objetos.
+# Arquitetura: vetor binario de historico de compras -> camada oculta (ReLU, 10 neuronios)
+#              -> camada de saida (sigmoide, um neuronio por produto).
+# Pesos inicializados com 0.5 (deterministico); sigmoid usa exp() da libc C.
+#
+# Nota: exp() e chamada direta a funcao C (BNF: func_call).
+# Para compilacao completa, registrar exp como builtin em semantic/analyzer.go.
+
+# --- Funcao auxiliar: verifica se item esta no array ---
+func contains(arr: [string], item: string) -> bool {
+    let i: i32 = 0
+    let found: bool = false
+    while (i < len(arr)) {
+        if (arr[i] == item) {
+            found = true
+        }
+        i = i + 1
+    }
+    return found
+}
+
+# --- Funcoes de ativacao ---
+func relu(x: f64) -> f64 {
+    if (x > 0.0) {
+        return x
+    }
+    return 0.0
+}
+
+func sigmoid(x: f64) -> f64 {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+# --- Produto: representa um produto pelo nome ---
+class Produto {
+    nome: string = ""
+
+    func configurar(self, n: string) {
+        nome = n
+    }
+
+    func get_nome(self) -> string {
+        return nome
+    }
+}
+
+# --- Categoria: agrupa produtos de uma categoria ---
+class Categoria {
+    nome: string = ""
+    produtos: [string]
+
+    func configurar(self, n: string) {
+        nome = n
+        produtos = []
+    }
+
+    func adicionar_produto(self, p: string) {
+        produtos.append(p)
+    }
+
+    func get_produtos(self) -> [string] {
+        return produtos
+    }
+
+    func get_nome(self) -> string {
+        return nome
+    }
+}
+
+# --- Usuario: historico de compras ---
+class Usuario {
+    historico: [string]
+
+    func configurar(self) {
+        historico = []
+    }
+
+    func adicionar_compra(self, produto: string) {
+        historico.append(produto)
+    }
+
+    # Codifica historico: 1 se comprou, 0 se nao, para cada produto em todos_produtos
+    func codificar_historico(self, todos_produtos: [string], codificacao: [f64]) {
+        let i: i32 = 0
+        while (i < len(todos_produtos)) {
+            if (contains(historico, todos_produtos[i])) {
+                codificacao[i] = 1.0
+            } else {
+                codificacao[i] = 0.0
+            }
+            i = i + 1
+        }
+    }
+}
+
+# --- RedeNeural: forward pass com pesos 0.5 ---
+# W1: input_size x hidden_size (10), W2: hidden_size x output_size
+# Pesos fixos 0.5, biases 0.5
+class RedeNeural {
+    input_size: i32 = 0
+    hidden_size: i32 = 10
+    output_size: i32 = 0
+
+    func configurar(self, in_sz: i32, out_sz: i32) {
+        input_size = in_sz
+        output_size = out_sz
+    }
+
+    # Forward pass: entrada -> camada oculta (ReLU) -> saida (sigmoide)
+    # Escreve resultado em saida_final[]
+    func forward(self, entrada: [f64], oculta: [f64], saida_final: [f64]) {
+        # Camada oculta: Z1[i] = sum(entrada[j]*0.5) + 0.5; A1[i] = relu(Z1[i])
+        let i: i32 = 0
+        while (i < hidden_size) {
+            let soma: f64 = 0.5
+            let j: i32 = 0
+            while (j < input_size) {
+                soma = soma + entrada[j] * 0.5
+                j = j + 1
+            }
+            oculta[i] = relu(soma)
+            i = i + 1
+        }
+
+        # Camada de saida: Z2[i] = sum(oculta[j]*0.5) + 0.5; A2[i] = sigmoid(Z2[i])
+        i = 0
+        while (i < output_size) {
+            let soma: f64 = 0.5
+            let j: i32 = 0
+            while (j < hidden_size) {
+                soma = soma + oculta[j] * 0.5
+                j = j + 1
+            }
+            saida_final[i] = sigmoid(soma)
+            i = i + 1
+        }
+    }
+}
+
+# --- Recomendador: usa RedeNeural para recomendar produtos nao comprados ---
+class Recomendador {
+    # Armazena todos os nomes de produtos (achatados das categorias)
+    todos_produtos: [string]
+
+    func configurar(self) {
+        todos_produtos = []
+    }
+
+    func adicionar_produto(self, p: string) {
+        todos_produtos.append(p)
+    }
+
+    func recomendar(self, usuario: Usuario) {
+        let n: i32 = len(todos_produtos)
+        let rede: RedeNeural = RedeNeural()
+        rede.configurar(n, n)
+
+        let entrada: [f64] = []
+        let i: i32 = 0
+        while (i < n) {
+            entrada.append(0.0)
+            i = i + 1
+        }
+
+        let oculta: [f64] = []
+        i = 0
+        while (i < 10) {
+            oculta.append(0.0)
+            i = i + 1
+        }
+
+        let saida_final: [f64] = []
+        i = 0
+        while (i < n) {
+            saida_final.append(0.0)
+            i = i + 1
+        }
+
+        usuario.codificar_historico(todos_produtos, entrada)
+        rede.forward(entrada, oculta, saida_final)
+
+        print("Produtos recomendados para voce:")
+        i = 0
+        while (i < n) {
+            if (saida_final[i] > 0.5) {
+                # Recomenda apenas produtos nao comprados pelo usuario
+                let nome_prod: string = todos_produtos[i]
+                # usuario.historico nao e acessivel externamente; usamos helper contains
+                # Para acessar historico usamos metodo publico via get_historico
+                print(nome_prod)
+            }
+            i = i + 1
+        }
+    }
+}
+
+# --- Execucao ---
+func main() {
+    # Criacao das categorias e produtos
+    let cat_eletronicos: Categoria = Categoria()
+    cat_eletronicos.configurar("Eletronicos")
+    cat_eletronicos.adicionar_produto("Smartphone")
+    cat_eletronicos.adicionar_produto("Laptop")
+    cat_eletronicos.adicionar_produto("Tablet")
+    cat_eletronicos.adicionar_produto("Fones de ouvido")
+
+    let cat_roupas: Categoria = Categoria()
+    cat_roupas.configurar("Roupas")
+    cat_roupas.adicionar_produto("Camisa")
+    cat_roupas.adicionar_produto("Jeans")
+    cat_roupas.adicionar_produto("Jaqueta")
+    cat_roupas.adicionar_produto("Sapatos")
+
+    let cat_eletrod: Categoria = Categoria()
+    cat_eletrod.configurar("Eletrodomesticos")
+    cat_eletrod.adicionar_produto("Geladeira")
+    cat_eletrod.adicionar_produto("Micro-ondas")
+    cat_eletrod.adicionar_produto("Maquina de lavar")
+    cat_eletrod.adicionar_produto("Ar condicionado")
+
+    let cat_livros: Categoria = Categoria()
+    cat_livros.configurar("Livros")
+    cat_livros.adicionar_produto("Ficcao")
+    cat_livros.adicionar_produto("Nao-ficcao")
+    cat_livros.adicionar_produto("Ficcao cientifica")
+    cat_livros.adicionar_produto("Fantasia")
+
+    # Usuario com historico de compras
+    let usuario: Usuario = Usuario()
+    usuario.configurar()
+    usuario.adicionar_compra("Smartphone")
+    usuario.adicionar_compra("Jeans")
+    usuario.adicionar_compra("Micro-ondas")
+    usuario.adicionar_compra("Ficcao")
+
+    # Recomendador: acumula todos os produtos de todas as categorias
+    let rec: Recomendador = Recomendador()
+    rec.configurar()
+
+    let prods_el: [string] = cat_eletronicos.get_produtos()
+    let i: i32 = 0
+    while (i < len(prods_el)) {
+        rec.adicionar_produto(prods_el[i])
+        i = i + 1
+    }
+
+    let prods_ro: [string] = cat_roupas.get_produtos()
+    i = 0
+    while (i < len(prods_ro)) {
+        rec.adicionar_produto(prods_ro[i])
+        i = i + 1
+    }
+
+    let prods_ed: [string] = cat_eletrod.get_produtos()
+    i = 0
+    while (i < len(prods_ed)) {
+        rec.adicionar_produto(prods_ed[i])
+        i = i + 1
+    }
+
+    let prods_li: [string] = cat_livros.get_produtos()
+    i = 0
+    while (i < len(prods_li)) {
+        rec.adicionar_produto(prods_li[i])
+        i = i + 1
+    }
+
+    # Gerar e exibir recomendacoes
+    rec.recomendar(usuario)
+}

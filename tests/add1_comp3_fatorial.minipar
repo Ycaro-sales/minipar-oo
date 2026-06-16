@@ -1,0 +1,31 @@
+# Teste Adicional 1 — Paralelismo Real (3 Computadores): Computador 3
+# Servidor de Calculo de Fatorial.
+# Recebe um inteiro n e retorna n! ao Computador 1.
+#
+# Execucao:
+#   1. ./mcc tests/add1_comp2_matmul.minipar   (iniciar primeiro)
+#   2. ./mcc tests/add1_comp3_fatorial.minipar (iniciar segundo)
+#   3. ./mcc tests/add1_comp1_menu.minipar     (iniciar por ultimo)
+
+func calcular_fatorial(n: i32) -> i32 {
+    print("Computador 3: calculando fatorial de", n)
+    if (n == 0 or n == 1) {
+        return 1
+    }
+    let resultado: i32 = 1
+    let i: i32 = 2
+    while (i <= n) {
+        resultado = resultado * i
+        i = i + 1
+    }
+    print("Computador 3: fatorial(", n, ") =", resultado)
+    return resultado
+}
+
+let descricao: string = "Servidor Fatorial — Computador 3 (porta 6002)"
+s_channel canal_fatorial(calcular_fatorial, descricao, "192.168.1.3", 6002)
+
+func main() {
+    print("Servidor de Fatorial iniciado.")
+    print("Aguardando conexao do Computador 1 na porta 6002...")
+}

@@ -65,11 +65,20 @@ func (a *Analyzer) registerBuiltins() {
 			Type: &Type{Name: "func", Kind: KindFunc, Params: []*Type{tAny}, Return: ret},
 		})
 	}
+	builtin0 := func(name string, ret *Type) {
+		a.global.Define(&symbol{
+			Name: name, Kind: symtab.Func,
+			Type: &Type{Name: "func", Kind: KindFunc, Params: []*Type{}, Return: ret},
+		})
+	}
 	builtin("len", primitives["int"])
 	builtin("to_string", tString)
 	builtin("to_number", primitives["int"])
 	builtin("isalpha", tBool)
 	builtin("isnum", tBool)
+	builtin("exp", primitives["float"])
+	builtin0("rand", primitives["int"]) // CORREÇÃO: rand() agora não exige argumentos
+	builtin("srand", tVoid)
 }
 
 // GlobalScope returns the root of the retained scope tree built during
@@ -597,8 +606,9 @@ func (a *Analyzer) inferExpr(e ast.Expression) *Type {
 }
 
 func (a *Analyzer) checkIdentifier(n *ast.Identifier) *Type {
-	// Resolution walks outward to enclosing scopes, including the Class scope
-	// for bare field references inside a method body.
+	if (n.Value == "Self" || n.Value == "self") && a.currentClass != nil {
+		return &Type{Name: a.currentClass.name, Kind: KindClass}
+	}
 	if sym := a.scope.Resolve(n.Value); sym != nil {
 		return sym.Type
 	}
@@ -723,7 +733,23 @@ func (a *Analyzer) checkMethodCall(n *ast.MethodCall) *Type {
 		a.checkArgs(n.Args)
 		return tInvalid
 	}
-	a.checkCallArgs(n.Method, sig, n.Args, n.Line)
+	expectedArgs := sig.Params
+	if len(expectedArgs) > 0 {
+		expectedArgs = expectedArgs[1:] 
+	}
+	got := make([]*Type, len(n.Args))
+	for i, arg := range n.Args {
+		got[i] = a.checkExpr(arg)
+	}
+	if len(n.Args) != len(expectedArgs) {
+		a.errorf(n.Line, "'%s' espera %d argumento(s), recebeu %d", n.Method, len(expectedArgs), len(n.Args))
+	} else {
+		for i := range n.Args {
+			if !assignable(expectedArgs[i], got[i]) {
+				a.errorf(n.Line, "argumento %d de '%s': esperado '%s', recebido '%s'", i+1, n.Method, expectedArgs[i], got[i])
+			}
+		}
+	}
 	return sig.Return
 }
 

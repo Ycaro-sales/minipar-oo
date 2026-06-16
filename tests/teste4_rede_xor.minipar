@@ -1,0 +1,125 @@
+# Teste 4 — Rede Neural para aprender a funcao XOR
+# Traduzido do Programa de Teste 4 do professor (Python), usando FUNCOES Minipar.
+# Arquitetura: 2 entradas, 1 camada oculta com 3 neuronios, 1 saida.
+# Ativacao: sigmoide (usa exp() da libc C).
+# Treinamento: feedforward + backpropagation, 20000 epocas.
+#
+# Nota: exp(), rand(), srand() sao chamadas diretas a funcoes C (BNF: func_call).
+# Parse/semantico: exp/rand/srand precisam ser registrados como builtins para
+# compilacao completa de ponta a ponta (follow-up em semantic/analyzer.go).
+
+# --- Funcoes auxiliares de ativacao ---
+
+func sigmoid(x: f64) -> f64 {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+func sigmoid_deriv(x: f64) -> f64 {
+    return x * (1.0 - x)
+}
+
+# --- Feedforward da camada oculta ---
+# Calcula saidas dos 3 neuronios ocultos (2 entradas cada) e grava em saidas_oc.
+func ff_oculta(e0: f64, e1: f64,
+               w0_0: f64, w0_1: f64, b_oc0: f64,
+               w1_0: f64, w1_1: f64, b_oc1: f64,
+               w2_0: f64, w2_1: f64, b_oc2: f64,
+               saidas_oc: [f64]) {
+    saidas_oc[0] = sigmoid(e0 * w0_0 + e1 * w0_1 + b_oc0)
+    saidas_oc[1] = sigmoid(e0 * w1_0 + e1 * w1_1 + b_oc1)
+    saidas_oc[2] = sigmoid(e0 * w2_0 + e1 * w2_1 + b_oc2)
+}
+
+# --- Feedforward do neuronio de saida ---
+func ff_saida(h0: f64, h1: f64, h2: f64,
+              wo0: f64, wo1: f64, wo2: f64, bo: f64) -> f64 {
+    return sigmoid(h0 * wo0 + h1 * wo1 + h2 * wo2 + bo)
+}
+
+func main() {
+    # Semente para reproducibilidade (rand() da libc C)
+    srand(42)
+
+    # --- Pesos iniciais (rand() / RAND_MAX para valores em [0,1]) ---
+    let w0_0: f64 = rand() / 32767.0
+    let w0_1: f64 = rand() / 32767.0
+    let w1_0: f64 = rand() / 32767.0
+    let w1_1: f64 = rand() / 32767.0
+    let w2_0: f64 = rand() / 32767.0
+    let w2_1: f64 = rand() / 32767.0
+
+    let b_oc0: f64 = rand() / 32767.0
+    let b_oc1: f64 = rand() / 32767.0
+    let b_oc2: f64 = rand() / 32767.0
+
+    let wo0: f64 = rand() / 32767.0
+    let wo1: f64 = rand() / 32767.0
+    let wo2: f64 = rand() / 32767.0
+    let bo: f64 = rand() / 32767.0
+
+    # --- Dados XOR: 4 padroes de entrada e saida desejada ---
+    let entradas_e0: [f64] = [0.0, 0.0, 1.0, 1.0]
+    let entradas_e1: [f64] = [0.0, 1.0, 0.0, 1.0]
+    let saidas_desej: [f64] = [0.0, 1.0, 1.0, 0.0]
+
+    let taxa: f64 = 0.2
+    let saidas_oc: [f64] = [0.0, 0.0, 0.0]
+
+    # --- Treinamento: 20000 epocas ---
+    let epoca: i32 = 0
+    while (epoca < 20000) {
+        let k: i32 = 0
+        while (k < 4) {
+            let e0: f64 = entradas_e0[k]
+            let e1: f64 = entradas_e1[k]
+
+            ff_oculta(e0, e1, w0_0, w0_1, b_oc0, w1_0, w1_1, b_oc1, w2_0, w2_1, b_oc2, saidas_oc)
+            let h0: f64 = saidas_oc[0]
+            let h1: f64 = saidas_oc[1]
+            let h2: f64 = saidas_oc[2]
+
+            let sf: f64 = ff_saida(h0, h1, h2, wo0, wo1, wo2, bo)
+
+            let erro: f64 = saidas_desej[k] - sf
+            let delta_s: f64 = erro * sigmoid_deriv(sf)
+
+            # Atualiza pesos da camada de saida
+            wo0 = wo0 + h0 * delta_s * taxa
+            wo1 = wo1 + h1 * delta_s * taxa
+            wo2 = wo2 + h2 * delta_s * taxa
+            bo  = bo  + delta_s * taxa
+
+            # Atualiza pesos da camada oculta (backprop)
+            let d0: f64 = delta_s * wo0 * sigmoid_deriv(h0)
+            let d1: f64 = delta_s * wo1 * sigmoid_deriv(h1)
+            let d2: f64 = delta_s * wo2 * sigmoid_deriv(h2)
+
+            w0_0 = w0_0 + e0 * d0 * taxa
+            w0_1 = w0_1 + e1 * d0 * taxa
+            b_oc0 = b_oc0 + d0 * taxa
+
+            w1_0 = w1_0 + e0 * d1 * taxa
+            w1_1 = w1_1 + e1 * d1 * taxa
+            b_oc1 = b_oc1 + d1 * taxa
+
+            w2_0 = w2_0 + e0 * d2 * taxa
+            w2_1 = w2_1 + e1 * d2 * taxa
+            b_oc2 = b_oc2 + d2 * taxa
+
+            k = k + 1
+        }
+        epoca = epoca + 1
+    }
+
+    # --- Teste: exibe saida da rede para cada padrao XOR ---
+    print("Resultados XOR apos treinamento:")
+    let k: i32 = 0
+    while (k < 4) {
+        let e0: f64 = entradas_e0[k]
+        let e1: f64 = entradas_e1[k]
+        ff_oculta(e0, e1, w0_0, w0_1, b_oc0, w1_0, w1_1, b_oc1, w2_0, w2_1, b_oc2, saidas_oc)
+        let sf: f64 = ff_saida(saidas_oc[0], saidas_oc[1], saidas_oc[2], wo0, wo1, wo2, bo)
+        print("Input: [", e0, ",", e1, "] Predicted Output:", sf)
+        k = k + 1
+    }
+}

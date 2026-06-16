@@ -1,0 +1,40 @@
+# Teste 1 — Calculadora Aritmetica: Cliente (Computador 1)
+# Traduzido do Programa de Teste 1 do professor.
+# O cliente exibe o menu, solicita a operacao e operandos, envia ao servidor
+# (computador 2) via canal e imprime o resultado recebido.
+# Execucao:
+#   1. Iniciar o servidor primeiro: ./mcc tests/teste1_calc_server.minipar
+#   2. Iniciar este cliente:        ./mcc tests/teste1_calc_client.minipar
+
+# Declaracao do canal de comunicacao com o servidor (computador 2).
+c_channel calculadora("localhost", 5001)
+
+func main() {
+    seq {
+        # Apresentar opcoes da calculadora ao usuario
+        print("=== Calculadora Aritmetica ===")
+        print("Operacoes disponiveis: +, -, *, /")
+        print("")
+
+        # Demonstracao com operacoes pre-definidas (input retorna void em Minipar;
+        # valores fixos ilustram o fluxo cliente-servidor do enunciado).
+        print("Teste 1: 10 + 5")
+        calculadora.send("+", 10, 5)
+
+        print("Teste 2: 20 - 8")
+        calculadora.send("-", 20, 8)
+
+        print("Teste 3: 6 * 7")
+        calculadora.send("*", 6, 7)
+
+        print("Teste 4: 100 / 4")
+        calculadora.send("/", 100, 4)
+
+        print("")
+        print("Todos os testes concluidos.")
+    }
+
+    # Encerra a conexao com o servidor
+    calculadora.close()
+    print("Conexao encerrada.")
+}

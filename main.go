@@ -159,8 +159,8 @@ func absPath(p string) string {
 // buildBinary compiles the C source into a native binary using gcc.
 // buildBinary compiles the C source into a native binary using gcc.
 func buildBinary(cSource, outName string) error {
-	// A MÁGICA AQUI: adicionamos o "-fopenmp" na chamada interna do compilador
-	cmd := exec.Command("gcc", "-fopenmp", "-x", "c", "-", "-o", outName)
+	// A MÁGICA AQUI: adicionamos o "-fopenmp" e o "-lm" no final para matemática!
+	cmd := exec.Command("gcc", "-fopenmp", "-x", "c", "-", "-o", outName, "-lm")
 	cmd.Stdin = strings.NewReader(cSource)
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
