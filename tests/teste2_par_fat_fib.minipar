@@ -1,0 +1,47 @@
+# Teste 2 — Execucao Paralela: Fatorial e Fibonacci
+# Traduzido do Programa de Teste 2 do professor.
+# Thread 1 (bloco par): calcula o Fatorial de numeros de 1 a 10.
+# Thread 2 (bloco par): calcula os 10 primeiros termos da Serie de Fibonacci.
+# Ambas executadas de forma simultanea ("paralela") no mesmo computador via par{}.
+
+# Calculo recursivo do fatorial de n
+func fatorial(n: i32) -> i32 {
+    if (n == 0 or n == 1) {
+        return 1
+    } else {
+        return n * fatorial(n - 1)
+    }
+}
+
+# Imprime o fatorial de cada inteiro de 1 ate limite (thread 1)
+func imprimir_fatorial(limite: i32) {
+    let i: i32 = 1
+    while (i <= limite) {
+        print("Fatorial de", i, "=", fatorial(i))
+        i = i + 1
+    }
+}
+
+# Imprime os primeiros n termos da serie de Fibonacci (thread 2)
+func imprimir_fibonacci(n: i32) {
+    print("Serie de Fibonacci (primeiros", n, "termos):")
+    let a: i32 = 0
+    let b: i32 = 1
+    let count: i32 = 0
+    while (count < n) {
+        print("Fib[", count, "] =", a)
+        let aux: i32 = a + b
+        a = b
+        b = aux
+        count = count + 1
+    }
+}
+
+func main() {
+    # As duas funcoes sao disparadas em paralelo dentro do bloco par{}.
+    # Thread 1: calculo do Fatorial; Thread 2: calculo da Serie de Fibonacci.
+    par {
+        imprimir_fatorial(10)
+        imprimir_fibonacci(10)
+    }
+}

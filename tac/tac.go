@@ -49,13 +49,17 @@ type TACGenerator struct {
 	instructions []TAC
 	tempCount    int
 	labelCount   int
-	tempTypes    map[string]string // temp name -> resolved type, from the decorated AST
+	tempTypes    map[string]string // temp name -> resolved type
 	loopStack    []LoopLabels
+	lambdaQueue  []TAC // NOVO: Guarda as lambdas
 }
 
 // New returns a ready-to-use TACGenerator.
 func New() *TACGenerator {
-	return &TACGenerator{tempTypes: map[string]string{}}
+	return &TACGenerator{
+		tempTypes:   map[string]string{},
+		lambdaQueue: make([]TAC, 0), // NOVO
+	}
 }
 
 // TempType returns the resolved type recorded for a temporary, or "" if unknown.
@@ -204,6 +208,7 @@ func (gen *TACGenerator) emit(op, arg1, arg2, result string) {
 // Generate receives an AST Node and generates corresponding TAC instructions.
 // When the AST Node is an Expression, Generate also returns the temp variable
 // which contains the expression's result.
+// Generate receives an AST Node and generates corresponding TAC instructions.
 func (gen *TACGenerator) Generate(node ast.Node) string {
 	if node == nil {
 		return ""
@@ -215,7 +220,7 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	case *ast.Program:
 		return gen.genProgram(n)
 
-	/* LITERALS - apenas retornam seus valores para a chamada superior */
+	/* LITERALS */
 	case *ast.IntLiteral:
 		return fmt.Sprintf("%d", n.Value)
 
@@ -237,11 +242,8 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	case *ast.TupleLiteral:
 		return gen.genTupleLiteral(n)
 
-	// TODO implement dict literal
-
-	// TODO implement set literal
-
-	// TODO implement function literal
+	case *ast.FuncLiteral:
+		return gen.genFuncLiteral(n)
 
 	case *ast.SelfExpr:
 		return "self"
@@ -345,6 +347,27 @@ func (gen *TACGenerator) Generate(node ast.Node) string {
 	default:
 		return "ERRO"
 	}
+}
+func (gen *TACGenerator) genFuncLiteral(node *ast.FuncLiteral) string {
+	funcName := fmt.Sprintf("lambda_%d", gen.tempCount)
+	gen.tempCount++
+	
+	// Salva as instruções atuais para não misturar com o código da lambda
+	savedInstrs := gen.instructions
+	gen.instructions = nil
+	
+	gen.emit("BEGIN_FUNC", funcName, node.ReturnType, "")
+	for _, param := range node.Params {
+		gen.emit("PARAM_DECL", param.Name, param.Type, "")
+	}
+	gen.genBlock(node.Body)
+	gen.emit("END_FUNC", funcName, "", "")
+	
+	// Guarda a função anônima gerada na fila e restaura o bloco atual
+	gen.lambdaQueue = append(gen.lambdaQueue, gen.instructions...)
+	gen.instructions = savedInstrs
+	
+	return funcName
 }
 
 // ==========================================
@@ -474,6 +497,10 @@ func (gen *TACGenerator) genVarDecl(node *ast.VarDecl) {
 func (gen *TACGenerator) genProgram(node *ast.Program) string {
 	for _, decl := range node.Declarations {
 		gen.Generate(decl)
+	}
+
+	if len(gen.lambdaQueue) > 0 {
+		gen.instructions = append(gen.instructions, gen.lambdaQueue...)
 	}
 	return ""
 }

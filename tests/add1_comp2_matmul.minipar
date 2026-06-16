@@ -1,0 +1,31 @@
+# Teste Adicional 1 — Paralelismo Real (3 Computadores): Computador 2
+# Servidor de Multiplicacao de Matrizes 2x2.
+# Recebe os 8 elementos de duas matrizes (a11,a12,a21,a22, b11,b12,b21,b22)
+# e retorna o elemento c11 da matriz resultado (A*B)[0][0].
+# Para o teste completo, o Computador 1 envia os dados via canal_matmul.
+#
+# Execucao:
+#   1. ./mcc tests/add1_comp2_matmul.minipar   (iniciar primeiro)
+#   2. ./mcc tests/add1_comp3_fatorial.minipar (iniciar segundo)
+#   3. ./mcc tests/add1_comp1_menu.minipar     (iniciar por ultimo)
+
+# Multiplica as matrizes 2x2 A e B e retorna c11 = A[0][0]*B[0][0] + A[0][1]*B[1][0]
+func multiplicar_matrizes(a11: f64, a12: f64, a21: f64, a22: f64,
+                           b11: f64, b12: f64, b21: f64, b22: f64) -> f64 {
+    let c11: f64 = a11 * b11 + a12 * b21
+    let c12: f64 = a11 * b12 + a12 * b22
+    let c21: f64 = a21 * b11 + a22 * b21
+    let c22: f64 = a21 * b12 + a22 * b22
+    print("Resultado da Multiplicacao de Matrizes A*B:")
+    print("C[1][1] =", c11, "  C[1][2] =", c12)
+    print("C[2][1] =", c21, "  C[2][2] =", c22)
+    return c11
+}
+
+let descricao: string = "Servidor Multiplicacao de Matrizes 2x2 — Computador 2 (porta 6001)"
+s_channel canal_matmul(multiplicar_matrizes, descricao, "192.168.1.2", 6001)
+
+func main() {
+    print("Servidor de Multiplicacao de Matrizes iniciado.")
+    print("Aguardando conexao do Computador 1 na porta 6001...")
+}

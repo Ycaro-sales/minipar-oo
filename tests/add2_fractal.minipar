@@ -1,0 +1,84 @@
+# Teste Adicional 2 — Fractal do Tapete de Sierpinski
+# Traduzido de tests/Fractal-python.py (Programa de Teste Adicional 2 do professor).
+# A tela (turtle) e simulada por uma matriz_Fractal de strings (27x27).
+# Celulas preenchidas usam "*"; celulas removidas (centro de cada nivel) usam ".".
+# Apos construir o fractal na matriz, o resultado e impresso na tela.
+
+# Tamanho da matriz: 3^3 = 27 (3 niveis de recursao)
+let TAMANHO: i32 = 27
+
+# Inicializa a matriz com o caractere de preenchimento
+func inicializar(mat: [[string]], tamanho: i32) {
+    let i: i32 = 0
+    while (i < tamanho) {
+        let linha: [string] = []
+        let j: i32 = 0
+        while (j < tamanho) {
+            linha.append("*")
+            j = j + 1
+        }
+        mat.append(linha)
+        i = i + 1
+    }
+}
+
+# Desenha recursivamente o tapete de Sierpinski na matriz.
+# rs/re: linha inicio/fim (exclusivo); cs/ce: coluna inicio/fim (exclusivo).
+# A cada nivel, o quadrado central (1/9 da area) e marcado com ".".
+# Os 8 quadrados ao redor sao recursivamente processados.
+func draw_sierpinski_carpet(mat: [[string]], rs: i32, re: i32, cs: i32, ce: i32, depth: i32) {
+    if (depth <= 0) {
+        return
+    }
+
+    let h: i32 = (re - rs) / 3
+    let w: i32 = (ce - cs) / 3
+
+    # Marca o quadrado central (linha rs+h ate rs+2h, coluna cs+w ate cs+2w)
+    let r: i32 = rs + h
+    while (r < rs + h + h) {
+        let c: i32 = cs + w
+        while (c < cs + w + w) {
+            mat[r][c] = "."
+            c = c + 1
+        }
+        r = r + 1
+    }
+
+    # Recurse nos 8 subsquadros ao redor do centro (topo-esquerda -> baixo-direita)
+    draw_sierpinski_carpet(mat, rs,       rs + h,       cs,       cs + w,       depth - 1)
+    draw_sierpinski_carpet(mat, rs,       rs + h,       cs + w,   cs + w + w,   depth - 1)
+    draw_sierpinski_carpet(mat, rs,       rs + h,       cs + w + w, ce,          depth - 1)
+    draw_sierpinski_carpet(mat, rs + h,   rs + h + h,   cs,       cs + w,       depth - 1)
+    draw_sierpinski_carpet(mat, rs + h,   rs + h + h,   cs + w + w, ce,          depth - 1)
+    draw_sierpinski_carpet(mat, rs + h + h, re,         cs,       cs + w,       depth - 1)
+    draw_sierpinski_carpet(mat, rs + h + h, re,         cs + w,   cs + w + w,   depth - 1)
+    draw_sierpinski_carpet(mat, rs + h + h, re,         cs + w + w, ce,          depth - 1)
+}
+
+# Imprime a matriz linha por linha, concatenando celulas em uma string de linha
+func imprimir(mat: [[string]], tamanho: i32) {
+    let i: i32 = 0
+    while (i < tamanho) {
+        let linha: string = ""
+        let j: i32 = 0
+        while (j < tamanho) {
+            linha = linha + mat[i][j]
+            j = j + 1
+        }
+        print(linha)
+        i = i + 1
+    }
+}
+
+func main() {
+    let mat: [[string]] = []
+    inicializar(mat, TAMANHO)
+
+    # Equivalente a draw_sierpinski_carpet(initial_x, initial_y, initial_r, iterations)
+    # com r mapeado para metade do lado (TAMANHO/2) e depth = 3
+    draw_sierpinski_carpet(mat, 0, TAMANHO, 0, TAMANHO, 3)
+
+    print("Fractal do Tapete de Sierpinski (", TAMANHO, "x", TAMANHO, "):")
+    imprimir(mat, TAMANHO)
+}

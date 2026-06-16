@@ -507,7 +507,7 @@ func (p *miniparParser) parseStatement() ast.Statement {
 			Line: decl.Line, Params: decl.Params,
 			ReturnType: decl.ReturnType, Body: decl.Body,
 		}}
-	case lexer.IDENT:
+	case lexer.IDENT, lexer.SELF:
 		return p.parseIdentifierStmt()
 	default:
 		p.errors = append(p.errors, fmt.Sprintf(
@@ -710,14 +710,18 @@ func (p *miniparParser) parseInputStmt() *ast.InputStmt {
 
 func (p *miniparParser) parseReturnStmt() *ast.ReturnStmt {
 	line := p.currentToken.Line
-	p.nextToken()
 	var value ast.Expression
-	if !p.currentTokenIs(lexer.SEMICOLON) {
+
+	// Verifica se há uma expressão para retornar (se o próximo token NÃO for ';' nem '}')
+	if !p.peekTokenIs(lexer.SEMICOLON) && !p.peekTokenIs(lexer.RBRACE) {
+		p.nextToken() // Avança para o primeiro token da expressão
 		value = p.parseExpression()
-		if p.peekTokenIs(lexer.SEMICOLON) {
-			p.nextToken()
-		}
 	}
+
+	if p.peekTokenIs(lexer.SEMICOLON) {
+		p.nextToken()
+	}
+
 	return &ast.ReturnStmt{Line: line, Value: value}
 }
 
