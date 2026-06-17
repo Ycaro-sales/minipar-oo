@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Prism from "prismjs";
 import {
@@ -18,7 +18,9 @@ import {
   ChevronRight,
   AlertCircle,
   Upload,
+  Clock,
 } from "lucide-react";
+import { EXECUTION_TIMEOUT_SEC } from "@/lib/constants";
 
 const Editor = dynamic(() => import("react-simple-code-editor"), { ssr: false });
 
@@ -98,9 +100,33 @@ export default function Studio() {
   );
   const [isError, setIsError] = useState(false);
   const [running, setRunning] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [runElapsedSec, setRunElapsedSec] = useState(0);
   const [copied, setCopied] = useState(false);
+  const runStartedAtRef = useRef<number | null>(null);
 
   const lineCount = useMemo(() => code.split("\n").length, [code]);
+
+  useEffect(() => {
+    if (!executing) {
+      setRunElapsedSec(0);
+      runStartedAtRef.current = null;
+      return;
+    }
+
+    runStartedAtRef.current = Date.now();
+    setRunElapsedSec(0);
+
+    const timer = window.setInterval(() => {
+      if (runStartedAtRef.current !== null) {
+        setRunElapsedSec(Math.floor((Date.now() - runStartedAtRef.current) / 1_000));
+      }
+    }, 250);
+
+    return () => window.clearInterval(timer);
+  }, [executing]);
+
+  const runNearTimeout = executing && runElapsedSec >= EXECUTION_TIMEOUT_SEC - 10;
 
   async function handleCompile() {
     setRunning(true);
@@ -190,6 +216,7 @@ export default function Studio() {
 
   async function handleRun() {
     setRunning(true);
+    setExecuting(true);
     setIsError(false);
     try {
       const res = await fetch("/api/run", {
@@ -217,6 +244,7 @@ export default function Studio() {
       setOutput(`Erro ao conectar com o servidor:\n${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRunning(false);
+      setExecuting(false);
     }
   }
 
@@ -351,7 +379,7 @@ export default function Studio() {
           {/* Workspace */}
           <section className="grid gap-4 lg:gap-6 lg:grid-cols-2 min-w-0">
             {/* Editor panel */}
-            <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col min-w-0">
+            <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col min-w-0 h-[65vh] max-h-[700px]">
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2 min-w-0">
                   <Code2 className="h-4 w-4 text-primary shrink-0" />
@@ -368,6 +396,30 @@ export default function Studio() {
               </div>
 
               <div className="relative flex-1 bg-editor scrollbar-thin overflow-auto">
+                {executing && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={`sticky top-0 z-10 flex items-center gap-2 border-b px-4 py-2 text-xs ${
+                      runNearTimeout
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-warning/40 bg-warning/10 text-warning"
+                    }`}
+                  >
+                    {runNearTimeout ? (
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span>
+                      Executando… limite de {EXECUTION_TIMEOUT_SEC}s
+                      {runElapsedSec > 0 && (
+                        <span className="font-medium"> · {runElapsedSec}s</span>
+                      )}
+                      {runNearTimeout && " · próximo do limite"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex min-h-full">
                   <pre
                     aria-hidden
@@ -459,7 +511,7 @@ export default function Studio() {
             </div>
 
             {/* Output panel */}
-            <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col min-h-[400px] min-w-0">
+            <div className="rounded-2xl border border-border bg-panel/60 backdrop-blur overflow-hidden flex flex-col h-[35vh] min-h-[600px] max-h-[700px] min-w-0">
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2 min-w-0">
                   {isError ? (
