@@ -3,6 +3,8 @@ import { promisify } from "util";
 import { existsSync } from "fs";
 import path from "path";
 import os from "os";
+import { EXECUTION_TIMEOUT_MS, EXECUTION_TIMEOUT_SEC } from "./constants";
+import { spawnWithStdin } from "./spawnRun";
 
 const execFileAsync = promisify(execFile);
 
@@ -152,6 +154,22 @@ export function formatExecError(err: unknown): string {
   }
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function formatRunOutput(stdout: string, stderr: string, exitCode: number): string {
+  const parts: string[] = [stdout.trimEnd()];
+
+  if (stderr.trim()) {
+    parts.push(`\n[stderr]\n${stderr.trimEnd()}`);
+  }
+
+  if (exitCode === 0) {
+    parts.push(`\n\n✓ Programa finalizado (exit ${exitCode})`);
+  } else {
+    parts.push(`\n\n✗ Programa encerrado com código ${exitCode}`);
+  }
+
+  return parts.filter(Boolean).join("").trimStart();
 }
 
 function binPath(tmpDir: string): string {
@@ -354,32 +372,34 @@ export async function runExecute(code: string): Promise<RunResult> {
       await chmod(outBin, 0o755).catch(() => {});
     }
 
-    const result = await execFileAsync(outBin, [], {
-      ...mccExecOptions(tmpDir, 10_000),
-    }).catch((e: Error & { stderr?: string; stdout?: string; code?: number }) => ({
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? "",
-      exitCode: typeof e.code === "number" ? e.code : 1,
-    }));
+    const { stdout, stderr, exitCode } = await spawnWithStdin(
+      outBin,
+      [],
+      "",
+      EXECUTION_TIMEOUT_MS
+    );
 
-    const stdout = result.stdout ?? "";
-    const stderr = result.stderr ?? "";
-    const exitCode = "exitCode" in result ? result.exitCode : 0;
+    const output = formatRunOutput(stdout, stderr, exitCode);
+    return { success: exitCode === 0, output, exitCode };
+
+  } catch (err: unknown) {
+    // Timeout carrega stdout/stderr com o que foi coletado até o momento
+    const timeoutStdout: string = (err as any)?.stdout ?? "";
+    const timeoutStderr: string = (err as any)?.stderr ?? "";
+    const message = err instanceof Error ? err.message : String(err);
 
     const output = [
-      stdout.trimEnd(),
-      stderr ? `\n[stderr]\n${stderr.trimEnd()}` : "",
-      `\n\n✓ Programa finalizado (exit ${exitCode})`,
+      timeoutStdout.trimEnd(),
+      timeoutStderr.trim() ? `\n[stderr]\n${timeoutStderr.trimEnd()}` : "",
+      `\n\n✗ ${message}`,
     ]
       .filter(Boolean)
       .join("")
       .trimStart();
 
-    return { success: true, output, exitCode };
-  } catch (err: unknown) {
     return {
       success: false,
-      output: formatExecError(err),
+      output,
       exitCode: 1,
     };
   } finally {

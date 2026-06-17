@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runExecute } from "@/lib/mcc";
 
+/** Compilação + execução (60s de execução + margem para build). */
+export const maxDuration = 90;
+
 interface RunResponse {
   success: boolean;
   output: string;
