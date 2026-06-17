@@ -565,7 +565,8 @@ func (g *CGenerator) Generate() string {
 	// =========================================================================
 	// Forward Declarations e Definições completas para Classes
 	isClass := make(map[string]bool)
-	classFields := make(map[string][]string) // NOVO: Guarda os campos para os macros!
+	classFields := make(map[string][]string)          // NOVO: Guarda os campos para os macros!
+	classFieldDefaults := make(map[string]map[string]string) // NOVO: campo -> valor default literal
 
 	for i := 0; i < len(g.instrs); i++ {
 		if g.instrs[i].Op == "BEGIN_CLASS" {
@@ -581,6 +582,12 @@ func (g *CGenerator) Generate() string {
 				if g.instrs[j].Op == "FIELD" {
 					g.buf.WriteString(fmt.Sprintf("    %s %s;\n", mapType(g.instrs[j].Arg2), g.instrs[j].Arg1))
 					classFields[cls] = append(classFields[cls], g.instrs[j].Arg1) // GUARDA O CAMPO!
+					if def := g.instrs[j].Result; def != "" {                     // GUARDA O VALOR DEFAULT!
+						if classFieldDefaults[cls] == nil {
+							classFieldDefaults[cls] = make(map[string]string)
+						}
+						classFieldDefaults[cls][g.instrs[j].Arg1] = def
+					}
 					fieldCount++
 				}
 			}
@@ -672,7 +679,21 @@ func (g *CGenerator) Generate() string {
 					g.funcLocalTypes[g.currentFunc][instr.Result] = callName // Registra a Classe localmente!
 				}
 				prefix := g.declPrefix(instr.Result)
-				g.buf.WriteString(fmt.Sprintf("%s%s%s = (%s){0};\n", g.ind(), prefix, instr.Result, callName))
+				// Aplica os valores default dos campos da classe (designated initializers)
+				// em vez de zerar tudo, preservando os defaults declarados na classe.
+				init := "{0}"
+				if defaults := classFieldDefaults[callName]; len(defaults) > 0 {
+					var parts []string
+					for _, f := range classFields[callName] {
+						if v, ok := defaults[f]; ok {
+							parts = append(parts, fmt.Sprintf(".%s = %s", f, v))
+						}
+					}
+					if len(parts) > 0 {
+						init = "{ " + strings.Join(parts, ", ") + " }"
+					}
+				}
+				g.buf.WriteString(fmt.Sprintf("%s%s%s = (%s)%s;\n", g.ind(), prefix, instr.Result, callName, init))
 				continue
 			}
 

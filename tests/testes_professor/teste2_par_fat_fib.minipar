@@ -41,7 +41,7 @@ func main() {
     # As duas funcoes sao disparadas em paralelo dentro do bloco par{}.
     # Thread 1: calculo do Fatorial; Thread 2: calculo da Serie de Fibonacci.
     par {
-        imprimir_fatorial(10)
-        imprimir_fibonacci(10)
+        imprimir_fatorial(5)
+        imprimir_fibonacci(5)
     }
 }
